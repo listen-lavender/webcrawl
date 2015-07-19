@@ -1,0 +1,201 @@
+#!/usr/bin/python
+# coding=utf-8
+
+"""
+   tools of wrapped requests or related things
+"""
+import json
+import requests
+import random
+import urllib2
+import Image
+import StringIO
+import functools
+import threading
+
+from lxml import etree as ET
+from lxml import html as HT
+from character import unicode2utf8
+from work import MyLocal
+from exception import URLFailureException
+
+myproxys = []
+
+CONS = MyLocal(PROXYURL='http://app.maopao.com:7777/listallproxy', PROXYTIMEOUT=30, USEPROXYS=False, FILEMAKE=True, FILEDIR='/home/hotelinfo/file/')
+
+def contentFilter(contents):
+    return contents
+
+def chooseProxy():
+    global myproxys
+    if myproxys:
+        return myproxys
+    else:
+        r = requests.get(CONS.PROXYURL)
+        proxys = json.loads(r.content)
+        proxys = unicode2utf8(proxys)
+        proxys.sort(cmp=lambda x,y : cmp(x[2], y[2]))
+        for proxy in proxys:
+            #["50.70.48.217", "8080", 12.131555, "00", "11110"]
+            proxyip, proxyport, speed, area, cls = proxy
+            if float(speed) < 10 and cls.startswith('0'):
+                myproxys.append(proxy)
+            if float(speed) >= 10:
+                break
+        return myproxys
+
+def byProxys(fun):
+    @functools.wraps(fun)
+    def wrapper(*args, **kwargs):
+        if CONS.USEPROXYS:
+            myproxys = chooseProxy()
+            proxy = random.choice(myproxys)
+            kwargs['proxies'] = {"http": "http://%s:%s" % (proxy[0], proxy[1])} if not 'proxies' in kwargs else kwargs['proxies']
+            kwargs['timeout'] = CONS.PROXYTIMEOUT if kwargs.get('timeout') is None else max(kwargs['timeout'], CONS.PROXYTIMEOUT)
+        return fun(*args, **kwargs)
+    return wrapper
+
+def getHtmlNodeContent(node, consrc, *args, **kwargs):
+    """
+    """
+    if node is not None:
+        if consrc == 'TEXT':
+            if not args and not kwargs:
+                retvar = node.text_content() or ''
+            else:
+                epath = './/' + args[0]
+                for key, val in kwargs.items():
+                    epath = epath + '[@' + key + '="' + val + '"]'
+                retvar = node.find(epath)
+                retvar =  retvar.text_content() if retvar is not None and retvar.text_content() is not None else ''
+        else:
+            if not args and not kwargs:
+                retvar = node.get(consrc['ATTR']) or ''
+            else:
+                epath = './/' + args[0]
+                for key, val in kwargs.items():
+                    epath = epath + '[@' + key + '="' + val + '"]'
+                retvar = node.find(epath)
+                retvar =  retvar.get(consrc['ATTR']) if retvar is not None and retvar.get(consrc['ATTR']) is not None else ''
+        retvar = retvar.encode('utf-8')
+    else:
+        retvar = ''
+    return retvar.strip()
+
+def getXmlNodeContent(node, consrc, *args, **kwargs):
+    """
+    """
+    if node is not None:
+        if consrc == 'TEXT':
+            if not args and not kwargs:
+                retvar = node.text or ''
+            else:
+                epath = './/' + args[0]
+                for key, val in kwargs.items():
+                    epath = epath + '[@' + key + '="' + val + '"]'
+                retvar = node.find(epath)
+                retvar =  retvar.text if retvar is not None and retvar.text is not None else ''
+        else:
+            if not args and not kwargs:
+                retvar = node.get(consrc['ATTR']) or ''
+            else:
+                epath = './/' + args[0]
+                for key, val in kwargs.items():
+                    epath = epath + '[@' + key + '="' + val + '"]'
+                retvar = node.find(epath)
+                retvar =  retvar.get(consrc['ATTR']) if retvar is not None and retvar.get(consrc['ATTR']) is not None else ''
+        # retvar = retvar.encode('utf-8')
+    else:
+        retvar = ''
+    return retvar.strip()
+
+def hanleResp(r, dirtys, myfilter):
+    code = r.status_code
+    contents = r.content
+    for one in dirtys:
+        contents = contents.replace(one[0], one[1])
+    contents = myfilter(contents)
+    if not code in [200, 301, 302]:
+        raise URLFailureException(url, code)
+    contents = contents.decode(coding, 'ignore')
+    if format == 'HTML':
+        content = HT.fromstring(contents)
+    elif format == 'JSON':
+        content = unicode2utf8(json.loads(contents))
+    elif format == 'XML':
+        content = ET.fromstring(contents.encode('utf-8'))
+    elif format == 'TEXT':
+        content = contents.encode('utf-8')
+    elif format == 'ORIGIN':
+        content = r
+    else:
+        raise
+    if CONS.FILEMAKE and tofile is not None:
+        fi = open(CONS.FILEDIR + tofile, 'w')
+        fi.write(contents)
+        fi.close()
+    return content
+
+@byProxys
+def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, format='ORIGIN', coding='utf-8', dirtys=[], myfilter=contentFilter, tofile=None, s=None):
+    """
+    """
+    if s is None:
+        r = requests.get(url, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+    else:
+        r = s.get(url, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+    return hanleResp(r, dirtys, myfilter)
+
+@byProxys
+def requPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, format='ORIGIN', coding='utf-8', dirtys=[], myfilter=contentFilter, tofile=None, s=None):
+    """
+    """
+    if s is None:
+        r = requests.post(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+    else:
+        r = s.post(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+    return hanleResp(r, dirtys, myfilter)
+
+@byProxys
+def requHead(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, format='ORIGIN', coding='utf-8', dirtys=[], myfilter=contentFilter, tofile=None, s=None):
+    """
+    """
+    if s is None:
+        r = requests.head(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+    else:
+        r = s.head(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+    return hanleResp(r, dirtys, myfilter)
+
+def requImg(url, tofile=None):
+    """
+    """
+    r = urllib2.Request(url)
+    img_data = urllib2.urlopen(r).read()
+    img_buffer = StringIO.StringIO(img_data)
+    img = Image.open(img_buffer)
+    if CONS.FILEMAKE and tofile is not None:
+        img.save(CONS.FILEDIR + tofile)
+    return img
+
+def treeHtml(content, coding='unicode'):
+    """
+    """
+    if coding is None or coding == 'unicode':
+        pass
+    else:
+        content = content.decode(coding, 'ignore')
+    return HT.fromstring(content)
+
+def treeXml(content, coding='unicode'):
+    """
+    """
+    if coding is None or coding == 'unicode':
+        pass
+    else:
+        content = content.decode(coding, 'ignore')
+    return ET.fromstring(content)
+
+if __name__ == '__main__':
+    print 'start...'
+    print 'hkhkh', requHead('http://www.homeinns.com/hotel/027060')
+    print 'end...'
