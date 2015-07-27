@@ -7,7 +7,7 @@
 import math
 import base64
 from math import sqrt, sin, atan2, cos
-from handleRequest import respGet
+from handleRequest import requGet
 
 base10to36 = [str(x) for x in range(10)] + [ chr(x) for x in range(ord('A'),ord('A')+26)]
 def dec2hex(num):

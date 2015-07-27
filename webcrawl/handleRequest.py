@@ -17,11 +17,11 @@ from lxml import etree as ET
 from lxml import html as HT
 from character import unicode2utf8
 from work import MyLocal
-from exception import URLFailureException
+from exception import URLFailureException, MarktypeError, FormatError
 
 myproxys = []
 
-CONS = MyLocal(PROXYURL='http://app.maopao.com:7777/listallproxy', PROXYTIMEOUT=30, USEPROXYS=False, FILEMAKE=True, FILEDIR='/home/hotelinfo/file/')
+CONS = MyLocal(PROXYURL='', PROXYTIMEOUT=30, USEPROXYS=False, FILEMAKE=True, FILEDIR='')
 
 def contentFilter(contents):
     return contents
@@ -55,219 +55,93 @@ def byProxys(fun):
         return fun(*args, **kwargs)
     return wrapper
 
-def getHtmlNodeContent(node, consrc, *args, **kwargs):
+def getNodeContent(node, consrc, marktype='HTML'):
     """
-        获取html的节点属性内容或者内容，从内容的节点的父辈节点可以获取
-        @param node: html节点
-        @param consrc: 'TEXT' ｜ {'ATTR':'id' | 'name' | 'src'...}
-        @param *args: 'table' | 'div' | 'ul' | 'tr'... (可选)
-        @param **kwargs: attrs={'id':'A', 'class':'B', 'style':'C'...} (可选)
-        @return: 节点属性内容或者str内容
     """
     if node is not None:
         if consrc == 'TEXT':
-            if not args and not kwargs:
+            if marktype == 'HTML':
                 retvar = node.text_content() or ''
+            elif marktype == 'XML':
+                retvar = node.text or ''
             else:
-                epath = './/' + args[0]
-                for key, val in kwargs.items():
-                    epath = epath + '[@' + key + '="' + val + '"]'
-                retvar = node.find(epath)
-                retvar =  retvar.text_content() if retvar is not None and retvar.text_content() is not None else ''
+                raise MarktypeError(marktype)
         else:
-            if not args and not kwargs:
-                retvar = node.get(consrc['ATTR']) or ''
-            else:
-                epath = './/' + args[0]
-                for key, val in kwargs.items():
-                    epath = epath + '[@' + key + '="' + val + '"]'
-                retvar = node.find(epath)
-                retvar =  retvar.get(consrc['ATTR']) if retvar is not None and retvar.get(consrc['ATTR']) is not None else ''
+            retvar = node.get(consrc['ATTR']) or ''
         retvar = retvar.encode('utf-8')
     else:
         retvar = ''
     return retvar.strip()
 
-def getXmlNodeContent(node, consrc, *args, **kwargs):
+def getHtmlNodeContent(node, consrc):
     """
-        获取xml的节点属性内容或者内容，从内容的节点的父辈节点可以获取
-        @param node: xml节点
-        @param consrc: 'TEXT' ｜ {'ATTR':'id' | 'name' | 'src'...}
-        @param *args: 'table' | 'div' | 'ul' | 'tr'... (可选)
-        @param **kwargs: attrs={'id':'A', 'class':'B', 'style':'C'...} (可选)
-        @return: 节点属性内容或者str内容
     """
-    if node is not None:
-        if consrc == 'TEXT':
-            if not args and not kwargs:
-                retvar = node.text or ''
-            else:
-                epath = './/' + args[0]
-                for key, val in kwargs.items():
-                    epath = epath + '[@' + key + '="' + val + '"]'
-                retvar = node.find(epath)
-                retvar =  retvar.text if retvar is not None and retvar.text is not None else ''
-        else:
-            if not args and not kwargs:
-                retvar = node.get(consrc['ATTR']) or ''
-            else:
-                epath = './/' + args[0]
-                for key, val in kwargs.items():
-                    epath = epath + '[@' + key + '="' + val + '"]'
-                retvar = node.find(epath)
-                retvar =  retvar.get(consrc['ATTR']) if retvar is not None and retvar.get(consrc['ATTR']) is not None else ''
-        # retvar = retvar.encode('utf-8')
+    return getNodeContent(node, consrc, 'HTML')
+
+def getXmlNodeContent(node, consrc):
+    """
+    """
+    return getNodeContent(node, consrc, 'XML')
+
+def requformat(r, coding, dirtys, myfilter, format, filepath):
+    code = r.status_code
+    contents = r.content
+    contents = contents.decode(coding, 'ignore').encode('utf-8')
+    if not code in [200, 301, 302]:
+        raise URLFailureException(url, code)
+    for one in dirtys:
+        contents = contents.replace(one[0], one[1])
+    contents = myfilter(contents)
+    if format == 'HTML':
+        content = HT.fromstring(contents.decode('utf-8'))
+    elif format == 'JSON':
+        content = unicode2utf8(json.loads(contents.decode('utf-8')))
+    elif format == 'XML':
+        content = ET.fromstring(contents)
+    elif format == 'TEXT':
+        content = contents
+    elif format == 'ORIGIN':
+        content = r
     else:
-        retvar = ''
-    return retvar.strip()
+        raise FormatError(format)
+    if CONS.FILEMAKE and filepath is not None:
+        fi = open(CONS.FILEDIR + filepath, 'w')
+        fi.write(contents)
+        fi.close()
+    return content
 
 @byProxys
-def respGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, format='ORIGIN', coding='utf-8', dirtys=[], myfilter=contentFilter, tofile=None, s=None):
+def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
-        Get方式获取页面内容，默认HTML解析，解析方式可选
-        @param url: get请求目标内容地址
-        @param headers: get请求头 (可选)
-        @param cookies: get请求cookie (可选)
-        @param proxies: get请求是否使用代理 (可选)
-        @param timeout: get请求超时时间 (可选)
-        @param allow_redirects: get请求是否允许重定向 (可选)
-        @param format: 定义返回内容的格式，支持html-lxml.html、xml-lxml.etree、json、text (可选)
-        @param coding: 解析编码处理
-        @param dirtys: 抓取内容清洗
-        @param tofile: 文件输出位置
-        @param s: 请求会话
-        @return: 返回get请求内容
     """
     if s is None:
         r = requests.get(url, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     else:
         r = s.get(url, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
-    code = r.status_code
-    contents = r.content
-    for one in dirtys:
-        contents = contents.replace(one[0], one[1])
-    contents = myfilter(contents)
-    if not code in [200, 301, 302]:
-        raise URLFailureException(url, code)
-    contents = contents.decode(coding, 'ignore')
-    if format == 'HTML':
-        content = HT.fromstring(contents)
-    elif format == 'JSON':
-        content = unicode2utf8(json.loads(contents))
-    elif format == 'XML':
-        content = ET.fromstring(contents.encode('utf-8'))
-    elif format == 'TEXT':
-        content = contents.encode('utf-8')
-    elif format == 'ORIGIN':
-        content = r
-    else:
-        raise
-    if CONS.FILEMAKE and tofile is not None:
-        fi = open(CONS.FILEDIR + tofile, 'w')
-        fi.write(contents)
-        fi.close()
-    return content
+    return requformat(r, coding, dirtys, myfilter, format, filepath)
 
 @byProxys
-def respPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, format='ORIGIN', coding='utf-8', dirtys=[], myfilter=contentFilter, tofile=None, s=None):
+def requPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
-        Post方式获取页面内容，默认HTML解析，解析方式可选
-        @param url: post请求目标内容地址
-        @param data: post请求提交内容
-        @param headers: post请求头 (可选)
-        @param cookies: post请求cookie (可选)
-        @param proxies: post请求是否使用代理 (可选)
-        @param timeout: post请求超时时间 (可选)
-        @param allow_redirects: get请求是否允许重定向 (可选)
-        @param format: 定义返回内容的格式，支持html-lxml.html、xml-lxml.etree、json、text (可选)
-        @param coding: 解析编码处理
-        @param dirtys: 抓取内容清洗
-        @param tofile: 文件输出位置
-        @param s: 请求会话
-        @return: 返回post请求内容
     """
     if s is None:
         r = requests.post(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     else:
         r = s.post(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
-    code = r.status_code
-    contents = r.content
-    for one in dirtys:
-        contents = contents.replace(one[0], one[1])
-    contents = myfilter(contents)
-    if not code in [200, 301, 302]:
-        raise 'view failure.'
-    contents = contents.decode(coding, 'ignore')
-    if format == 'HTML':
-        content = HT.fromstring(contents)
-    elif format == 'JSON':
-        content = unicode2utf8(json.loads(contents))
-    elif format == 'XML':
-        content = ET.fromstring(contents.encode('utf-8'))
-    elif format == 'TEXT':
-        content = contents.encode('utf-8')
-    elif format == 'ORIGIN':
-        content = r
-    else:
-        raise 'bad request.'
-    if CONS.FILEMAKE and tofile is not None:
-        fi = open(CONS.FILEDIR + tofile, 'w')
-        fi.write(contents)
-        fi.close()
-    return content
+    return requformat(r, coding, dirtys, myfilter, format, filepath)
 
 @byProxys
-def respHead(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, format='ORIGIN', coding='utf-8', dirtys=[], myfilter=contentFilter, tofile=None, s=None):
+def requHead(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
-        Head方式获取响应状态信息
-        @param url: head请求目标内容地址
-        @param headers: head请求头 (可选)
-        @param cookies: head请求cookie (可选)
-        @param proxies: head请求是否使用代理 (可选)
-        @param timeout: head请求超时时间 (可选)
-        @param allow_redirects: get请求是否允许重定向 (可选)
-        @param format: 定义返回内容的格式，支持html-lxml.html、xml-lxml.etree、json、text (可选)
-        @param coding: 解析编码处理
-        @param dirtys: 抓取内容清洗
-        @param tofile: 文件输出位置
-        @return: 返回head请求内容
     """
     if s is None:
         r = requests.head(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     else:
         r = s.head(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
-    code = r.status_code
-    contents = r.content
-    for one in dirtys:
-        contents = contents.replace(one[0], one[1])
-    contents = myfilter(contents)
-    if not code in [200, 301, 302]:
-        raise 'view failure.'
-    contents = contents.decode(coding, 'ignore')
-    if format == 'HTML':
-        content = HT.fromstring(contents)
-    elif format == 'JSON':
-        content = unicode2utf8(json.loads(contents))
-    elif format == 'XML':
-        content = ET.fromstring(contents.encode('utf-8'))
-    elif format == 'TEXT':
-        content = contents.encode('utf-8')
-    elif format == 'ORIGIN':
-        content = r
-    else:
-        raise 'bad request.'
-    if CONS.FILEMAKE and tofile is not None:
-        fi = open(CONS.FILEDIR + tofile, 'w')
-        fi.write(contents)
-        fi.close()
-    return content
+    return requformat(r, coding, dirtys, myfilter, format, filepath)
 
-def respImg(url, tofile=None):
+def requImg(url, tofile=None):
     """
-        获取在线图片
-        @param url: 请求图片地址
-        @param tofile: 图片文件输出位置
-        @return: 返回图片对象
     """
     r = urllib2.Request(url)
     img_data = urllib2.urlopen(r).read()
@@ -277,31 +151,30 @@ def respImg(url, tofile=None):
         img.save(CONS.FILEDIR + tofile)
     return img
 
-def treeHtml(content, coding='unicode'):
+def tree(content, coding='unicode', marktype='HTML'):
     """
-        解析HTML
-        @param content: Html内容
-        @return: Html dom树
     """
+    treefuns = {'HTML':HT.fromstring, 'XML':ET.fromstring}
     if coding is None or coding == 'unicode':
         pass
     else:
         content = content.decode(coding, 'ignore')
-    return HT.fromstring(content)
+    try:
+        return treefuns[marktype](content)
+    except:
+        raise MarktypeError(marktype)
+
+def treeHtml(content, coding='unicode'):
+    """
+    """
+    tree(content, coding, 'HTML')
 
 def treeXml(content, coding='unicode'):
     """
-        解析XML
-        @param content: Xml内容
-        @return: Xml dom树
     """
-    if coding is None or coding == 'unicode':
-        pass
-    else:
-        content = content.decode(coding, 'ignore')
-    return ET.fromstring(content)
-
+    tree(content, coding, 'XML')
+    
 if __name__ == '__main__':
     print 'start...'
-    print 'hkhkh', respHead('http://www.homeinns.com/hotel/027060')
+    print 'hkhkh', requHead('http://www.homeinns.com/hotel/027060')
     print 'end...'
