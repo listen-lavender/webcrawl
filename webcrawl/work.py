@@ -13,9 +13,10 @@ import functools
 import ctypes
 TID = threading._get_ident()
 from Queue import Queue
-from gevent import monkey
+from gevent import monkey, Timeout
+
+
 from queue import BeanstalkdQueue, GPriorjoinQueue, TPriorjoinQueue
-from gevent import Timeout
 from exception import TimeoutError
 
 

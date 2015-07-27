@@ -5,6 +5,7 @@ import heapq
 import beanstalkc
 from Queue import PriorityQueue
 from gevent.queue import Queue
+
 from character import unicode2utf8
 
 
