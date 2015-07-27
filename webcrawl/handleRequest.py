@@ -21,10 +21,13 @@ from exception import URLFailureException, MarktypeError, FormatError
 
 myproxys = []
 
-CONS = MyLocal(PROXYURL='', PROXYTIMEOUT=30, USEPROXYS=False, FILEMAKE=True, FILEDIR='')
+CONS = MyLocal(
+    PROXYURL='', PROXYTIMEOUT=30, USEPROXYS=False, FILEMAKE=True, FILEDIR='')
+
 
 def contentFilter(contents):
     return contents
+
 
 def chooseProxy():
     global myproxys
@@ -34,7 +37,7 @@ def chooseProxy():
         r = requests.get(CONS.PROXYURL)
         proxys = json.loads(r.content)
         proxys = unicode2utf8(proxys)
-        proxys.sort(cmp=lambda x,y : cmp(x[2], y[2]))
+        proxys.sort(cmp=lambda x, y: cmp(x[2], y[2]))
         for proxy in proxys:
             #["50.70.48.217", "8080", 12.131555, "00", "11110"]
             proxyip, proxyport, speed, area, cls = proxy
@@ -44,16 +47,20 @@ def chooseProxy():
                 break
         return myproxys
 
+
 def byProxys(fun):
     @functools.wraps(fun)
     def wrapper(*args, **kwargs):
         if CONS.USEPROXYS:
             myproxys = chooseProxy()
             proxy = random.choice(myproxys)
-            kwargs['proxies'] = {"http": "http://%s:%s" % (proxy[0], proxy[1])} if not 'proxies' in kwargs else kwargs['proxies']
-            kwargs['timeout'] = CONS.PROXYTIMEOUT if kwargs.get('timeout') is None else max(kwargs['timeout'], CONS.PROXYTIMEOUT)
+            kwargs['proxies'] = {
+                "http": "http://%s:%s" % (proxy[0], proxy[1])} if not 'proxies' in kwargs else kwargs['proxies']
+            kwargs['timeout'] = CONS.PROXYTIMEOUT if kwargs.get(
+                'timeout') is None else max(kwargs['timeout'], CONS.PROXYTIMEOUT)
         return fun(*args, **kwargs)
     return wrapper
+
 
 def getNodeContent(node, consrc, marktype='HTML'):
     """
@@ -73,15 +80,18 @@ def getNodeContent(node, consrc, marktype='HTML'):
         retvar = ''
     return retvar.strip()
 
+
 def getHtmlNodeContent(node, consrc):
     """
     """
     return getNodeContent(node, consrc, 'HTML')
 
+
 def getXmlNodeContent(node, consrc):
     """
     """
     return getNodeContent(node, consrc, 'XML')
+
 
 def requformat(r, coding, dirtys, myfilter, format, filepath):
     code = r.status_code
@@ -110,35 +120,45 @@ def requformat(r, coding, dirtys, myfilter, format, filepath):
         fi.close()
     return content
 
+
 @byProxys
 def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
     """
     if s is None:
-        r = requests.get(url, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+        r = requests.get(url, headers=headers, cookies=cookies,
+                         proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     else:
-        r = s.get(url, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+        r = s.get(url, headers=headers, cookies=cookies, proxies=proxies,
+                  timeout=timeout, allow_redirects=allow_redirects)
     return requformat(r, coding, dirtys, myfilter, format, filepath)
+
 
 @byProxys
 def requPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
     """
     if s is None:
-        r = requests.post(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+        r = requests.post(url, data=data, headers=headers, cookies=cookies,
+                          proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     else:
-        r = s.post(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+        r = s.post(url, data=data, headers=headers, cookies=cookies,
+                   proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     return requformat(r, coding, dirtys, myfilter, format, filepath)
+
 
 @byProxys
 def requHead(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
     """
     if s is None:
-        r = requests.head(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+        r = requests.head(url, data=data, headers=headers, cookies=cookies,
+                          proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     else:
-        r = s.head(url, data=data, headers=headers, cookies=cookies, proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
+        r = s.head(url, data=data, headers=headers, cookies=cookies,
+                   proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     return requformat(r, coding, dirtys, myfilter, format, filepath)
+
 
 def requImg(url, tofile=None):
     """
@@ -151,10 +171,11 @@ def requImg(url, tofile=None):
         img.save(CONS.FILEDIR + tofile)
     return img
 
+
 def tree(content, coding='unicode', marktype='HTML'):
     """
     """
-    treefuns = {'HTML':HT.fromstring, 'XML':ET.fromstring}
+    treefuns = {'HTML': HT.fromstring, 'XML': ET.fromstring}
     if coding is None or coding == 'unicode':
         pass
     else:
@@ -164,16 +185,18 @@ def tree(content, coding='unicode', marktype='HTML'):
     except:
         raise MarktypeError(marktype)
 
+
 def treeHtml(content, coding='unicode'):
     """
     """
     tree(content, coding, 'HTML')
 
+
 def treeXml(content, coding='unicode'):
     """
     """
     tree(content, coding, 'XML')
-    
+
 if __name__ == '__main__':
     print 'start...'
     print 'hkhkh', requHead('http://www.homeinns.com/hotel/027060')

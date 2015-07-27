@@ -1,13 +1,23 @@
 #!/usr/bin/python
 # coding=utf-8
 
-import threading, types, copy, sys, traceback, time, weakref, gevent, functools, ctypes
+import threading
+import types
+import copy
+import sys
+import traceback
+import time
+import weakref
+import gevent
+import functools
+import ctypes
 TID = threading._get_ident()
 from Queue import Queue
 from gevent import monkey
 from queue import BeanstalkdQueue, GPriorjoinQueue, TPriorjoinQueue
 from gevent import Timeout
 from exception import TimeoutError
+
 
 def patch_thread(threading=True, _threading_local=True, Queue=True, Event=False):
     """Replace the standard :mod:`thread` module to make it greenlet-based.
@@ -37,8 +47,10 @@ try:
 except:
     def modulename(n):
         return None
+
     def modulepath(p):
         return None
+
     def logprint(n, p):
         def _wraper(*args, **kwargs):
             print(' '.join(args))
@@ -46,15 +58,20 @@ except:
 
 _print, logger = logprint(modulename(__file__), modulepath(__file__))
 
+
 class MyLocal(threading.local):
+
     def __init__(self, **kwargs):
         # self.__dict__ = dict(self.__dict__, **kwargs)
         self.__dict__.update(**kwargs)
 
+
 class Onceworker(threading.Thread):
+
     """
         一次执行
     """
+
     def __init__(self):
         """
             初始化多线程
@@ -100,7 +117,8 @@ class Onceworker(threading.Thread):
             if self.__method:
                 self.__idle = False
                 if self.__callback:
-                    self.__callback(self.__method(*self.__args, **self.__kwargs))
+                    self.__callback(
+                        self.__method(*self.__args, **self.__kwargs))
                 else:
                     self.__method(*self.__args, **self.__kwargs)
                 self.__method = None
@@ -108,11 +126,14 @@ class Onceworker(threading.Thread):
                 self.__idle = True
             else:
                 time.sleep(0.1)
-            
+
+
 class Workpool(threading.Thread):
+
     """
         线程池
     """
+
     def __init__(self, maxsize):
         self.__maxsize = maxsize
         self.idleworkers = Queue(self.__maxsize)
@@ -122,7 +143,7 @@ class Workpool(threading.Thread):
             worker = Onceworker()
             worker.run()
             self.idleworkers.put(worker)
-    
+
     def get(self):
         if self.idleworkers.empty():
             return None
@@ -143,6 +164,8 @@ class Workpool(threading.Thread):
         self.exit()
 
 # wp = Workpool(10)
+
+
 def withWorkpool(wp, callback=None):
     def wrapped(fun):
         @functools.wraps(fun)
@@ -160,18 +183,22 @@ TIMELIMIT = 0
 
 _continuous = True
 
+
 def initflow(which):
     def wrap(fun):
         fun.label = which
+
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
             return fun(*args, **kwargs)
         return wrapped
     return wrap
 
+
 def index(key):
     def wrap(fun):
         fun.index = key
+
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
             return fun(*args, **kwargs)
@@ -189,20 +216,24 @@ def store(db, way, update, method):
         fun.store.succ = 0
         fun.store.fail = 0
         fun.store.timeout = 0
+
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
             return fun(*args, **kwargs)
         return wrapped
     return wrap
 
+
 def retry(num=1):
     def wrap(fun):
         fun.retry = num
+
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
             return fun(*args, **kwargs)
         return wrapped
     return wrap
+
 
 def next(method, *args, **kwargs):
     def wrap(fun):
@@ -215,38 +246,46 @@ def next(method, *args, **kwargs):
             # method.__func__.args = tuple((str(fun).split('at')[0].split('function')[-1].replace(' ', '') + ',' + ','.join(args)).split(','))
             method.__func__.kwargs = kwargs
             fun.next = method
+
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
             return fun(*args, **kwargs)
         return wrapped
     return wrap
+
 
 def dispatch(flag=False):
     def wrap(fun):
         fun.dispatch = flag
+
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
             return fun(*args, **kwargs)
         return wrapped
     return wrap
+
 
 def timelimit(seconds=TIMELIMIT):
     def wrap(fun):
         fun.timelimit = seconds
+
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
             return fun(*args, **kwargs)
         return wrapped
     return wrap
 
+
 def priority(level=0):
     def wrap(fun):
         fun.priority = level
+
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
             return fun(*args, **kwargs)
         return wrapped
     return wrap
+
 
 def assure(method):
     method.succ = 0
@@ -265,11 +304,15 @@ def assure(method):
     else:
         method.priority = None
 
+
 class Nevertimeout(object):
+
     def __init__(self):
         pass
+
     def cancel(self):
         pass
+
 
 def geventwork(workqueue):
     while _continuous:
@@ -299,47 +342,61 @@ def geventwork(workqueue):
                                         indexkwargs = dict(kwargs, **{})
                                     elif type(method.index) == str:
                                         indexargs = tuple(list(args))
-                                        indexkwargs = dict(kwargs, **{method.index:index})
+                                        indexkwargs = dict(
+                                            kwargs, **{method.index: index})
                                     else:
                                         raise "Incorrect arguments."
-                                    workqueue.put((priority, methodId, 0, indexargs, indexkwargs))
+                                    workqueue.put(
+                                        (priority, methodId, 0, indexargs, indexkwargs))
                             for retvar in result:
                                 if retvar:
                                     if type(retvar) == dict:
-                                        workqueue.put((method.next.priority, id(method.next), 0, (), retvar))
+                                        workqueue.put(
+                                            (method.next.priority, id(method.next), 0, (), retvar))
                                         if hasattr(method, 'store'):
-                                            workqueue.put((method.store.priority, id(method.store), 0, (), {'obj':retvar['obj']}))
+                                            workqueue.put(
+                                                (method.store.priority, id(method.store), 0, (), {'obj': retvar['obj']}))
                                     elif type(retvar) == tuple:
-                                        workqueue.put((method.next.priority, id(method.next), 0, retvar, {}))
+                                        workqueue.put(
+                                            (method.next.priority, id(method.next), 0, retvar, {}))
                                         if hasattr(method, 'store'):
-                                            workqueue.put((method.store.priority, id(method.store), 0, (retvar[0],), {}))
+                                            workqueue.put(
+                                                (method.store.priority, id(method.store), 0, (retvar[0],), {}))
                                     else:
                                         raise "Incorrect result for next function."
                             method.succ = method.succ + 1
                         except TimeoutError:
                             if times < method.retry:
                                 times = times + 1
-                                workqueue.put((priority, methodId, times, args, kwargs))
+                                workqueue.put(
+                                    (priority, methodId, times, args, kwargs))
                             else:
                                 method.timeout = method.timeout + 1
                         except:
                             if times < method.retry:
                                 times = times + 1
-                                workqueue.put((priority, methodId, times, args, kwargs))
+                                workqueue.put(
+                                    (priority, methodId, times, args, kwargs))
                             else:
                                 method.fail = method.fail + 1
                                 t, v, b = sys.exc_info()
-                                err_messages = traceback.format_exception(t, v, b)
-                                _print(method.__name__, ': %s, %s \n' % (str(args), str(kwargs)), ','.join(err_messages), '\n')
+                                err_messages = traceback.format_exception(
+                                    t, v, b)
+                                _print(method.__name__, ': %s, %s \n' % (
+                                    str(args), str(kwargs)), ','.join(err_messages), '\n')
                     else:
                         if type(result) == dict:
-                            workqueue.put((method.next.priority, id(method.next), 0, (), result))
+                            workqueue.put(
+                                (method.next.priority, id(method.next), 0, (), result))
                             if hasattr(method, 'store'):
-                                workqueue.put((method.store.priority, id(method.store), 0, (), {'obj':result['obj']}))
+                                workqueue.put(
+                                    (method.store.priority, id(method.store), 0, (), {'obj': result['obj']}))
                         elif type(retvar) == tuple:
-                            workqueue.put((method.next.priority, id(method.next), 0, result, {}))
+                            workqueue.put(
+                                (method.next.priority, id(method.next), 0, result, {}))
                             if hasattr(method, 'store'):
-                                workqueue.put((method.store.priority, id(method.store), 0, (result[0],), {}))
+                                workqueue.put(
+                                    (method.store.priority, id(method.store), 0, (result[0],), {}))
                         else:
                             raise "Incorrect result for next function."
                         method.succ = method.succ + 1
@@ -356,24 +413,32 @@ def geventwork(workqueue):
                                         indexkwargs = dict(kwargs, **{})
                                     elif type(method.index) == str:
                                         indexargs = tuple(list(args))
-                                        indexkwargs = dict(kwargs, **{method.index:index})
+                                        indexkwargs = dict(
+                                            kwargs, **{method.index: index})
                                     else:
                                         raise "Incorrect arguments."
-                                    workqueue.put((priority, methodId, 0, indexargs, indexkwargs))
+                                    workqueue.put(
+                                        (priority, methodId, 0, indexargs, indexkwargs))
                             for retvar in result:
                                 if retvar:
                                     if type(retvar) == dict:
-                                        workqueue.put((method.store.priority, id(method.store), 0, (), {'obj':retvar['obj']}))
+                                        workqueue.put(
+                                            (method.store.priority, id(method.store), 0, (), {'obj': retvar['obj']}))
                                     elif type(retvar) == tuple:
-                                        workqueue.put((method.store.priority, id(method.store), 0, (retvar[0],), {}))
+                                        workqueue.put(
+                                            (method.store.priority, id(method.store), 0, (retvar[0],), {}))
                                     else:
-                                        workqueue.put((method.store.priority, id(method.store), 0, (retvar,), {}))
+                                        workqueue.put(
+                                            (method.store.priority, id(method.store), 0, (retvar,), {}))
                         elif type(result) == dict:
-                            workqueue.put((method.store.priority, id(method.store), 0, (), {'obj':result['obj']}))
+                            workqueue.put(
+                                (method.store.priority, id(method.store), 0, (), {'obj': result['obj']}))
                         elif type(result) == tuple:
-                            workqueue.put((method.store.priority, id(method.store), 0, (result[0],), {}))
+                            workqueue.put(
+                                (method.store.priority, id(method.store), 0, (result[0],), {}))
                         else:
-                            workqueue.put((method.store.priority, id(method.store), 0, (result,), {}))
+                            workqueue.put(
+                                (method.store.priority, id(method.store), 0, (result,), {}))
                     # _print(method.__name__, ': %s, %s \n' % (str(args), str(kwargs)), str(result), '\n')
                     method.succ = method.succ + 1
             except TimeoutError:
@@ -390,16 +455,20 @@ def geventwork(workqueue):
                     method.fail = method.fail + 1
                     t, v, b = sys.exc_info()
                     err_messages = traceback.format_exception(t, v, b)
-                    _print(method.__name__, ': %s, %s \n' % (str(args), str(kwargs)), ','.join(err_messages), '\n')
+                    _print(method.__name__, ': %s, %s \n' %
+                           (str(args), str(kwargs)), ','.join(err_messages), '\n')
             finally:
                 workqueue.task_done()
                 timer.cancel()
                 del timer
 
+
 class Foreverworker(threading.Thread):
+
     """
         永久执行
     """
+
     def __init__(self, workqueue):
         """
             初始化多线程运行的方法和方法参数
@@ -414,10 +483,13 @@ class Foreverworker(threading.Thread):
         """
         geventwork(self.__workqueue)
 
+
 class Workflows(object):
+
     """
         任务流
     """
+
     def __init__(self, worknum, queuetype, worktype):
         if worktype == 'COROUTINE':
             monkey.patch_all(Event=True)
@@ -426,7 +498,7 @@ class Workflows(object):
             PriorjoinQueue = GPriorjoinQueue
         else:
             PriorjoinQueue = TPriorjoinQueue
-        self.__flowcount = {'inner':set(), 'outer':set()}
+        self.__flowcount = {'inner': set(), 'outer': set()}
         self.__worknum = worknum
         self.__queuetype = queuetype
         self.__worktype = worktype
@@ -452,7 +524,8 @@ class Workflows(object):
                 if self.__queuetype == 'P':
                     worker = functools.partial(geventwork, self.queue)
                 else:
-                    worker = functools.partial(geventwork, BeanstalkdQueue(tube=str(id(self))))
+                    worker = functools.partial(
+                        geventwork, BeanstalkdQueue(tube=str(id(self))))
                     # worker = functools.partial(geventwork, self.queue)
                 self.workers.append(worker)
         else:
@@ -484,24 +557,27 @@ class Workflows(object):
             if currmethod.priority is None:
                 currmethod.priority = nextmethod.priority + 1
             self.__flows[flow]['steps'] = self.__flows[flow]['steps'] + 1
-            self.__flows[flow]['hasprior'] = self.__flows[flow]['hasprior'] and (currmethod.priority is not None)
+            self.__flows[flow]['hasprior'] = self.__flows[flow][
+                'hasprior'] and (currmethod.priority is not None)
         elif it == currmethod:
             flag = True
             self.__flows[flow]['steps'] = 2
-            self.__flows[flow]['hasprior'] = (currmethod.priority is not None) and (nextmethod.priority is not None)
+            self.__flows[flow]['hasprior'] = (currmethod.priority is not None) and (
+                nextmethod.priority is not None)
         else:
             self.__flows[flow]['steps'] = self.__flows[flow]['steps'] + 1
             while hasattr(it, 'next'):
                 it = it.next
                 if it == currmethod:
-                    self.__flows[flow]['hasprior'] = self.__flows[flow]['hasprior'] and (nextmethod.priority is not None)
+                    self.__flows[flow]['hasprior'] = self.__flows[flow][
+                        'hasprior'] and (nextmethod.priority is not None)
                     flag = True
         if flag:
             currmethod.next = nextmethod
             if currmethod.next == self.__flows[flow]['tinder']:
                 self.__flows[flow]['tinder'] = currmethod
             else:
-            # if currmethod == self.__flows[flow]['terminator']:
+                # if currmethod == self.__flows[flow]['terminator']:
                 self.__flows[flow]['terminator'] == currmethod.next
             self.__flowcount['outer'].add(flow)
             it = self.__flows[flow]['tinder']
@@ -543,7 +619,8 @@ class Workflows(object):
             if hasattr(b, '__name__'):
                 pass
             else:
-                b.__name__ = str(p).split(' at ')[0].split(' of ')[0].split('<function ')[-1].split('.')[-1].replace(' ', '').replace('>', '')
+                b.__name__ = str(p).split(' at ')[0].split(' of ')[0].split(
+                    '<function ')[-1].split('.')[-1].replace(' ', '').replace('>', '')
             b.succ = 0
             b.fail = 0
             b.timeout = 0
@@ -567,16 +644,17 @@ class Workflows(object):
             print "Inner workflow can be set once and has been set."
         else:
             for it in dir(self):
-                it = eval('self.'+it)
+                it = getattr(self, it)  # eval('self.' + it)
                 if hasattr(it, 'label') and hasattr(it, 'next'):
-                    self.__flows[it.label] = {'tinder':it, 'terminator':it}
+                    self.__flows[it.label] = {'tinder': it, 'terminator': it}
             for flow in self.__flows.values():
                 flow['hasprior'] = True
                 flow['steps'] = 1
                 p = flow['tinder']
                 b = functools.partial(p)
                 imitate(p, b)
-                flow['hasprior'] = flow['hasprior'] and (b.priority is not None)
+                flow['hasprior'] = flow['hasprior'] and (
+                    b.priority is not None)
                 flow['tinder'] = b
                 self.__flowcount['inner'].add(p.label)
                 while hasattr(p, 'next') and hasattr(p.next, 'args') and hasattr(p.next, 'kwargs'):
@@ -585,10 +663,12 @@ class Workflows(object):
                     if hasattr(p, 'dispatch') and p.dispatch:
                         b.next = p(self, *p.args, **p.kwargs)
                     else:
-                        b.next = functools.partial(p, self, *p.args, **p.kwargs)
+                        b.next = functools.partial(
+                            p, self, *p.args, **p.kwargs)
                     b = b.next
                     imitate(p, b)
-                    flow['hasprior'] = flow['hasprior'] and (b.priority is not None)
+                    flow['hasprior'] = flow['hasprior'] and (
+                        b.priority is not None)
                     flow['terminator'] = b
             for flow in self.__flows.values():
                 if not flow['hasprior']:
@@ -609,7 +689,8 @@ class Workflows(object):
         #     self.__tinder = self.__flows[flow]['tinder']
         #     self.__terminator = self.__flows[flow]['terminator']
         if self.__flows[flow]['tinder'] is not None:
-            self.queue.put((self.__flows[flow]['tinder'].priority, id(self.__flows[flow]['tinder']), 0, args, kwargs))
+            self.queue.put((self.__flows[flow]['tinder'].priority, id(
+                self.__flows[flow]['tinder']), 0, args, kwargs))
             for worker in self.workers:
                 if self.__worktype == 'COROUTINE':
                     gevent.spawn(worker)

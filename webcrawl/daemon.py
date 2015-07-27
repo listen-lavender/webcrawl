@@ -3,18 +3,24 @@
 
 import re
 import threading
-import sys, os, time, atexit
+import sys
+import os
+import time
+import atexit
 try:
     from signal import SIGTERM, SIGKILL
 except:
     raise "Current OS doesn't support SIGTERM, SIGKILL."
 
+
 class Daemon(object):
+
     """
     A generic daemon class.
-    
+
     Usage: subclass the Daemon class and override the _run() method
     """
+
     def __init__(self, pidfile, stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
         pid_dir = os.path.split(pidfile)[0]
         if not os.path.exists(pid_dir):
@@ -37,7 +43,8 @@ class Daemon(object):
             if pid > 0:
                 sys.exit(0)
         except OSError, e:
-            sys.stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
+            sys.stderr.write("fork #1 failed: %d (%s)\n" %
+                             (e.errno, e.strerror))
             sys.exit(1)
 
         os.setsid()
@@ -49,7 +56,8 @@ class Daemon(object):
             if pid > 0:
                 sys.exit(0)
         except OSError, e:
-            sys.stderr.write("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
+            sys.stderr.write("fork #2 failed: %d (%s)\n" %
+                             (e.errno, e.strerror))
             sys.exit(1)
 
         sys.stdout.flush()
@@ -65,7 +73,7 @@ class Daemon(object):
             os.dup2(se.fileno(), sys.stderr.fileno())
         atexit.register(self.delpid)
         pid = str(os.getpid())
-        file(self.pidfile,'w+').write("%s\n" % pid)
+        file(self.pidfile, 'w+').write("%s\n" % pid)
 
     def delpid(self):
         os.remove(self.pidfile)
@@ -76,7 +84,7 @@ class Daemon(object):
         """
         # Check for a pidfile to see if the daemon already runs
         try:
-            pf = file(self.pidfile,'r')
+            pf = file(self.pidfile, 'r')
             pid = int(pf.read().strip())
             pf.close()
             os.kill(pid, 0)
@@ -103,7 +111,7 @@ class Daemon(object):
         """
         # Get the pid from the pidfile
         try:
-            pf = file(self.pidfile,'r')
+            pf = file(self.pidfile, 'r')
             pid = int(pf.read().strip())
             pf.close()
         except IOError:
@@ -112,8 +120,8 @@ class Daemon(object):
         if not pid:
             message = "pidfile %s does not exist. Daemon not running?\n"
             sys.stderr.write(message % self.pidfile)
-            return # not an error in a restart
-        # Try killing the daemon process    
+            return  # not an error in a restart
+        # Try killing the daemon process
         try:
             while 1:
                 #os.kill(pid, SIGTERM)
@@ -139,6 +147,7 @@ class Daemon(object):
         """
         Monitor the process, check whether it runs out of time.
         """
+
         def check(self, timeout):
             time.sleep(timeout)
             self.stop()
@@ -152,33 +161,37 @@ class Daemon(object):
         daemonized by start() or restart().
         """
 
+
 class DaemonHasChildren(Daemon):
+
     def stop(self):
         pid = None
         try:
-            pf = file(self.pidfile,'r')
+            pf = file(self.pidfile, 'r')
             pid = int(pf.read().strip())
             pf.close()
         except IOError:
             pass
-        if pid: # kill all child process
-            f = os.popen('ps --ppid=%s'%pid)
+        if pid:  # kill all child process
+            f = os.popen('ps --ppid=%s' % pid)
             s = f.read()
             for l in s.split('\n'):
-                sid = re.findall(r'\d+', l) # first column is PID
+                sid = re.findall(r'\d+', l)  # first column is PID
                 if sid:
                     print 'kill', sid[0]
-                    os.system('kill %s'%sid[0])
+                    os.system('kill %s' % sid[0])
         super(DaemonHasChildren, self).stop()
 
+
 class DaemonWithoutRun(Daemon):
+
     def start(self):
         """
         Start the daemon
         """
         # Check for a pidfile to see if the daemon already runs
         try:
-            pf = file(self.pidfile,'r')
+            pf = file(self.pidfile, 'r')
             pid = int(pf.read().strip())
             pf.close()
             os.kill(pid, 0)
@@ -194,5 +207,5 @@ class DaemonWithoutRun(Daemon):
 
         # Start the daemon
         self._daemonize()
-        #self._run()
-        #The next is what you want to loop forever, go do it!
+        # self._run()
+        # The next is what you want to loop forever, go do it!

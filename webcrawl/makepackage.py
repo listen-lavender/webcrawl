@@ -9,8 +9,9 @@ import os
 SRCPKGPATH = os.path.expanduser('~') + '/tmp/python/'
 DESCPKGPATH = '/home/sysmon/PythonPackages'
 
-EXCEPTS = ['pkg_resources','Queue','fcntl','functools','random','datetime','unittest','string','re','json','collections','smtplib','new','math','stat','urllib2','sys','copy','types','hashlib','logging','StringIO','traceback','threading','time','os']
-TRANS = {'MySQLdb':'mysql-python', 'git':"gitpython','gitdb", 'Image':'PIL'}
+EXCEPTS = ['pkg_resources', 'Queue', 'fcntl', 'functools', 'random', 'datetime', 'unittest', 'string', 're', 'json', 'collections', 'smtplib',
+           'new', 'math', 'stat', 'urllib2', 'sys', 'copy', 'types', 'hashlib', 'logging', 'StringIO', 'traceback', 'threading', 'time', 'os']
+TRANS = {'MySQLdb': 'mysql-python', 'git': "gitpython','gitdb", 'Image': 'PIL'}
 
 defaultInit = """#!/usr/bin/python
 # coding=utf-8
@@ -88,31 +89,33 @@ readmeTXT = """ This is {#name#}
 changeTXT = """ Package {#name#} change to {#version#}
 """
 
+
 def makeAssistdoc(pkgpath, pkgname, version):
     if os.path.exists(pkgpath + 'MANIFEST.in'):
         pass
     else:
         manifestdatas = manifestTXT.replace('{#name#}', pkgname)
-        fi = open(pkgpath+'MANIFEST.in', 'w')
+        fi = open(pkgpath + 'MANIFEST.in', 'w')
         fi.write(manifestdatas)
         fi.close()
     if os.path.exists(pkgpath + 'README.rst'):
         pass
     else:
         readmedatas = readmeTXT.replace('{#name#}', pkgname)
-        fi = open(pkgpath+'README.rst', 'w')
+        fi = open(pkgpath + 'README.rst', 'w')
         fi.write(readmedatas)
         fi.close()
-        fi = open(pkgpath+'README.md', 'w')
+        fi = open(pkgpath + 'README.md', 'w')
         fi.write(readmedatas)
         fi.close()
     if os.path.exists(pkgpath + 'CHANGES.rst'):
         pass
     else:
         changedatas = changeTXT.replace('{#name#}', pkgname)
-        fi = open(pkgpath+'CHANGES.rst', 'w')
+        fi = open(pkgpath + 'CHANGES.rst', 'w')
         fi.write(changedatas)
         fi.close()
+
 
 def checkVersionstr(version):
     """
@@ -124,6 +127,7 @@ def checkVersionstr(version):
         return False
     else:
         return True
+
 
 def pickupRely(filepath):
     """
@@ -138,17 +142,19 @@ def pickupRely(filepath):
             continue
         for part in line.split(';'):
             if 'from ' in part and 'import ' in part:
-                mod = part[part.index('from ')+len('from '):part.index('import')].strip() + '.'
+                mod = part[
+                    part.index('from ') + len('from '):part.index('import')].strip() + '.'
                 relys.append(mod[:mod.index('.')])
                 if mod[:mod.index('.')] == 'cada':
                     print filepath
             elif '__import__(' in part:
-                mod = part[part.index('__import__(')+len('__import__('):].replace("'", '').replace(')', '').strip() + '.'
+                mod = part[part.index(
+                    '__import__(') + len('__import__('):].replace("'", '').replace(')', '').strip() + '.'
                 relys.append(mod[:mod.index('.')])
                 if mod[:mod.index('.')] == 'cada':
                     print filepath
             elif 'import ' in part:
-                for mod in part[part.index('import ')+len('import '):].split(','):
+                for mod in part[part.index('import ') + len('import '):].split(','):
                     mod = mod.strip() + '.'
                     relys.append(mod[:mod.index('.')])
                     if mod[:mod.index('.')] == 'cada':
@@ -157,6 +163,7 @@ def pickupRely(filepath):
                 pass
     relys = list(set(relys))
     return relys
+
 
 def initDir(fdir, itemlist, isTop=False, version=None):
     """
@@ -169,7 +176,7 @@ def initDir(fdir, itemlist, isTop=False, version=None):
     if isTop == True:
         fi = open(os.path.join(fdir, '__init__.py'), 'w')
         assert checkVersionstr(version) == True
-        datas = topInit.replace('{#version#}', "'"+version+"'")
+        datas = topInit.replace('{#version#}', "'" + version + "'")
         fi.write(datas)
         fi.close()
     for item in itemlist:
@@ -182,6 +189,7 @@ def initDir(fdir, itemlist, isTop=False, version=None):
         fi.close()
     return True
 
+
 def walkDir(fdir, version, topdown=True, pkgname=None, pkgpath=SRCPKGPATH):
     import datetime
     dt = datetime.datetime.now().strftime('%Y%m')
@@ -192,7 +200,7 @@ def walkDir(fdir, version, topdown=True, pkgname=None, pkgpath=SRCPKGPATH):
     assert os.path.exists(fdir), '打包源不存在'
     if pkgname is None:
         pkgname = fdir.strip('/')
-        pkgname = pkgname[pkgname.rindex('/')+1:]
+        pkgname = pkgname[pkgname.rindex('/') + 1:]
         excepts.append(pkgname)
     else:
         excepts.append(pkgname)
@@ -205,28 +213,31 @@ def walkDir(fdir, version, topdown=True, pkgname=None, pkgpath=SRCPKGPATH):
     else:
         os.makedirs(pkgpath)
     if os.path.exists(pfdir + 'setup.py'):
-        fi = open(fdir+'__init__.py', 'r')
+        fi = open(fdir + '__init__.py', 'r')
         datas = fi.read()
         for line in fi.readlines():
             if '__version__' in line and version:
                 datas = datas.replace(line, "__version__ = '%s'" % version)
                 break
         else:
-            datas = topInit.replace('{#version#}', "'"+version+"'")
+            datas = topInit.replace('{#version#}', "'" + version + "'")
         fi.close()
-        fi = open(fdir+'__init__.py', 'w')
+        fi = open(fdir + '__init__.py', 'w')
         fi.write(datas)
         fi.close()
         print '初始化目录'
-        assert os.system("rsync -av --exclude '*.pyc' --exclude '*.log' --exclude '*.jpg' --exclude '*.png' %s %s" % (pfdir + '*', pkgpath)) == 0, '初始化打包目录失败'
+        assert os.system("rsync -av --exclude '*.pyc' --exclude '*.log' --exclude '*.jpg' --exclude '*.png' %s %s" %
+                         (pfdir + '*', pkgpath)) == 0, '初始化打包目录失败'
     else:
         print '初始化目录'
-        assert os.system("rsync -av --exclude '*.pyc' --exclude '*.log' --exclude '*.jpg' --exclude '*.png' %s %s" % ('/'+fdir.strip('/'), pkgpath)) == 0, '初始化打包目录失败'
+        assert os.system("rsync -av --exclude '*.pyc' --exclude '*.log' --exclude '*.jpg' --exclude '*.png' %s %s" %
+                         ('/' + fdir.strip('/'), pkgpath)) == 0, '初始化打包目录失败'
         fdir = pkgpath + pkgname
         print fdir
         for root, dirs, files in os.walk(fdir, topdown):
             if root.endswith('/bin'):
-                bins.extend([(root + '/' +  fi).replace(pkgpath, '') for fi in files])
+                bins.extend([(root + '/' + fi).replace(pkgpath, '')
+                             for fi in files])
                 continue
             for filename in files:
                 if filename.endswith('.py'):
@@ -234,7 +245,7 @@ def walkDir(fdir, version, topdown=True, pkgname=None, pkgpath=SRCPKGPATH):
                     relys.extend(pickupRely(os.path.join(root, filename)))
                     break
             else:
-                if len(files) >0:
+                if len(files) > 0:
                     continue
             if isTop:
                 initDir(root, files, isTop=isTop, version=version)
@@ -247,20 +258,22 @@ def walkDir(fdir, version, topdown=True, pkgname=None, pkgpath=SRCPKGPATH):
         for key, val in TRANS.items():
             relys = relys.replace(key, val)
         namespace_packages = "['" + pkgname + "',]"
-        if len(bins)>0:
-            bins = ''.join(("['", "','".join(bins) ,"']"))
+        if len(bins) > 0:
+            bins = ''.join(("['", "','".join(bins), "']"))
         else:
             bins = '[]'
-        setupdatas = setupTXT.replace('{#sps#}', spaceTXT.replace('{#import#}', "'"+pkgname+"'").replace('{#name#}', "'"+pkgname+"'").replace('{#namespace_packages#}', namespace_packages).replace('{#install_requires#}', relys).replace('{#scripts#}', bins))
-        fi = open(pkgpath+'setup.py', 'w')
+        setupdatas = setupTXT.replace('{#sps#}', spaceTXT.replace('{#import#}', "'" + pkgname + "'").replace('{#name#}', "'" + pkgname + "'").replace(
+            '{#namespace_packages#}', namespace_packages).replace('{#install_requires#}', relys).replace('{#scripts#}', bins))
+        fi = open(pkgpath + 'setup.py', 'w')
         fi.write(setupdatas)
         fi.close()
     makeAssistdoc(pkgpath, pkgname, version)
     print 'make package path: ', pkgpath
-    assert os.system('&&'.join(('. ~/.bash_profile', 'easy_install -mxN %s' % pkgname, 'cd %s' % pkgpath, 'python setup.py install', 'python setup.py sdist'))) == 0, '打包失败'
+    assert os.system('&&'.join(('. ~/.bash_profile', 'easy_install -mxN %s' % pkgname,
+                                'cd %s' % pkgpath, 'python setup.py install', 'python setup.py sdist'))) == 0, '打包失败'
     print '打包成功'
     pkg = None
-    for it in os.listdir(pkgpath+'dist/'):
+    for it in os.listdir(pkgpath + 'dist/'):
         pkg = pkgpath + 'dist/' + it
         if os.path.isfile(pkg) and ('.tar.gz' in pkg or '.zip' in pkg) and version in pkg:
             break
@@ -271,8 +284,10 @@ def walkDir(fdir, version, topdown=True, pkgname=None, pkgpath=SRCPKGPATH):
     # os.system('rm -rf %s' % pkgpath)
     return pkg, pkgpath
 
+
 def flushPipindex():
-    assert os.system('&&'.join(('. ~/.bash_profile', 'cd %s' % DESCPKGPATH, 'dir2pi .'))) == 0, '刷新索引失败'
+    assert os.system('&&'.join(
+        ('. ~/.bash_profile', 'cd %s' % DESCPKGPATH, 'dir2pi .'))) == 0, '刷新索引失败'
     print '刷新索引成功'
 
 if __name__ == '__main__':

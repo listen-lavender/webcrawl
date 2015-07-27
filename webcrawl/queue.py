@@ -7,6 +7,7 @@ from Queue import PriorityQueue
 from gevent.queue import Queue
 from character import unicode2utf8
 
+
 class BeanstalkdQueue(object):
     conditions = {}
 
@@ -19,7 +20,8 @@ class BeanstalkdQueue(object):
         if self.tube in BeanstalkdQueue.conditions:
             pass
         else:
-            BeanstalkdQueue.conditions[self.tube] = {'unfinished_tasks':unfinished_tasks or 0, 'event':threading.Event()}
+            BeanstalkdQueue.conditions[self.tube] = {
+                'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event()}
             self.clear()
             BeanstalkdQueue.conditions[self.tube]['event'].set()
         if items:
@@ -28,7 +30,8 @@ class BeanstalkdQueue(object):
 
     def put(self, item):
         priority, methodId, times, args, kwargs = item
-        self.bc.put(json.dumps({'priority':priority, 'methodId':methodId, 'times':times, 'args':args, 'kwargs':kwargs}), priority=priority)
+        self.bc.put(json.dumps({'priority': priority, 'methodId': methodId,
+                                'times': times, 'args': args, 'kwargs': kwargs}), priority=priority)
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] += 1
         BeanstalkdQueue.conditions[self.tube]['event'].clear()
 
@@ -52,7 +55,7 @@ class BeanstalkdQueue(object):
             raise ValueError('task_done() called too many times')
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] -= 1
         if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] == 0 or force:
-        # if self.empty() or force:
+            # if self.empty() or force:
             BeanstalkdQueue.conditions[self.tube]['event'].set()
 
     def join(self):
@@ -66,7 +69,9 @@ class BeanstalkdQueue(object):
     def __repr__(self):
         return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
 
+
 class GPriorjoinQueue(Queue):
+
     def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
         from gevent.event import Event
         Queue.__init__(self, maxsize, items)
@@ -86,7 +91,8 @@ class GPriorjoinQueue(Queue):
     def _format(self):
         result = Queue._format(self)
         if self.unfinished_tasks:
-            result += ' tasks=%s _cond=%s' % (self.unfinished_tasks, self._cond)
+            result += ' tasks=%s _cond=%s' % (
+                self.unfinished_tasks, self._cond)
         return result
 
     def _put(self, item, heappush=heapq.heappush):
@@ -108,7 +114,9 @@ class GPriorjoinQueue(Queue):
     def join(self):
         self._cond.wait()
 
+
 class TPriorjoinQueue(PriorityQueue):
+
     def _init(self, maxsize=None, items=None, unfinished_tasks=None):
         self.maxsize = maxsize or 0
         if items:
@@ -126,7 +134,8 @@ class TPriorjoinQueue(PriorityQueue):
     def _format(self):
         result = Queue._format(self)
         if self.unfinished_tasks:
-            result += ' tasks=%s _cond=%s' % (self.unfinished_tasks, self.all_tasks_done)
+            result += ' tasks=%s _cond=%s' % (
+                self.unfinished_tasks, self.all_tasks_done)
         return result
 
     def put(self, item, heappush=heapq.heappush):
@@ -163,13 +172,12 @@ if __name__ == '__main__':
 
     def consume():
         for i in range(10):
-             gevent.spawn(worker)
-
+            gevent.spawn(worker)
 
     def produce():
         for item in range(20):
             # print 'kkkkkk', 20 - item, item
-            q.put((20-item, item))
+            q.put((20 - item, item))
             gevent.sleep(0.1)
 
     import threading

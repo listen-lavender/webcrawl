@@ -5,6 +5,7 @@
    酒店相关解密
 """
 
+
 def hextoasiitochar(hexstr):
     """
         将四位十六进制转换成asii码，再转换成字符
@@ -13,7 +14,8 @@ def hextoasiitochar(hexstr):
     """
     hexstr = hexstr.upper()
     basestr = '0123456789ABCDEF'
-    basenum = {'0':0, '1':1, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, 'A':10, 'B':11, 'C':12, 'D':13, 'E':14, 'F':15}
+    basenum = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7,
+               '8': 8, '9': 9, 'A': 10, 'B': 11, 'C': 12, 'D': 13, 'E': 14, 'F': 15}
     assert type(hexstr) == str and len(hexstr) == 4
     for c in hexstr:
         if not c in basestr:
@@ -23,6 +25,7 @@ def hextoasiitochar(hexstr):
     for c in hexstr:
         asiinum += basenum[c] * (16 ** hexstr.index(c))
     return chr(asiinum)
+
 
 def decrypt100innhid(ehid):
     """
@@ -34,7 +37,7 @@ def decrypt100innhid(ehid):
     index = 0
     hid = ''
     for fourhex in ehid[::4]:
-        fourhex = ehid[index:index+4]
+        fourhex = ehid[index:index + 4]
         index = index + 4
         hid += hextoasiitochar(fourhex)
     return hid

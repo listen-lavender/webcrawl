@@ -4,6 +4,8 @@
 """
    酒店相关加密
 """
+
+
 def chrbyasiitohex(achr):
     """
         加密易佰的酒店ID解密
@@ -11,16 +13,18 @@ def chrbyasiitohex(achr):
         @return hexstr: 4位16进制字符串
     """
     assert type(achr) == str and len(achr) == 1
-    basechr = {0:'0', 1:'1', 2:'2', 3:'3', 4:'4', 5:'5', 6:'6', 7:'7', 8:'8', 9:'9', 10:'A', 11:'B', 12:'C', 13:'D', 14:'E', 15:'F'}
+    basechr = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7',
+               8: '8', 9: '9', 10: 'A', 11: 'B', 12: 'C', 13: 'D', 14: 'E', 15: 'F'}
     asiinum = ord(achr)
     hexstr = ''
     while True:
         c = basechr[asiinum % 16]
         hexstr = c + hexstr
         asiinum = (asiinum - asiinum % 16) / 16
-        if asiinum <1:
+        if asiinum < 1:
             break
     return hexstr.rjust(4, '0')
+
 
 def encrypt100innhid(dhid):
     """
