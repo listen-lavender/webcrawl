@@ -179,19 +179,9 @@ def assure(method):
     method.succ = 0
     method.fail = 0
     method.timeout = 0
-    if hasattr(method, 'retry'):
-        pass
-    else:
-        method.retry = RETRY
-    if hasattr(method, 'timelimit'):
-        pass
-    else:
-        method.timelimit = TIMELIMIT
-    if hasattr(method, 'priority'):
-        pass
-    else:
-        method.priority = None
-
+    not hasattr(method, 'retry') and setattr(method, 'retry', RETRY)
+    not hasattr(method, 'timelimit') and setattr(method, 'timelimit', TIMELIMIT)
+    not hasattr(method, 'priority') and setattr(method, 'priority', None)
 
 class Nevertimeout(object):
 
@@ -200,6 +190,7 @@ class Nevertimeout(object):
 
     def cancel(self):
         pass
+
 
 def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, times):
     index = result.next()
@@ -215,24 +206,25 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, tim
                 kwargs, **{method.index: index})
         else:
             raise "Incorrect arguments."
-        workqueue.put(
-            (priority, methodId, 0, indexargs, indexkwargs))
+        workqueue.put((priority, methodId, 0, indexargs, indexkwargs))
+
 
 def handleNextStore(workqueue, retvar, method, hasnext=False, hasstore=False):
     if type(retvar) == dict:
         hasnext and workqueue.put(
-                (method.next.priority, id(method.next), 0, (), retvar))
+            (method.next.priority, id(method.next), 0, (), retvar))
         hasstore and workqueue.put(
-                (method.store.priority, id(method.store), 0, (), {'obj': retvar['obj']}))
+            (method.store.priority, id(method.store), 0, (), {'obj': retvar['obj']}))
     elif type(retvar) == tuple:
         hasnext and workqueue.put(
-                (method.next.priority, id(method.next), 0, retvar, {}))
+            (method.next.priority, id(method.next), 0, retvar, {}))
         hasstore and workqueue.put(
-                (method.store.priority, id(method.store), 0, (retvar[0],), {}))
+            (method.store.priority, id(method.store), 0, (retvar[0],), {}))
     else:
         hasstore and workqueue.put(
-                (method.store.priority, id(method.store), 0, (retvar,), {}))
+            (method.store.priority, id(method.store), 0, (retvar,), {}))
         # raise "Incorrect result for next function."
+
 
 def handleExcept(workqueue, method, args, kwargs, times, methodId, count='fail'):
     if times < method.retry:
@@ -244,6 +236,7 @@ def handleExcept(workqueue, method, args, kwargs, times, methodId, count='fail')
         err_messages = traceback.format_exception(t, v, b)
         _print(method.__name__, ': %s, %s \n' %
                (str(args), str(kwargs)), ','.join(err_messages), '\n')
+
 
 def geventwork(workqueue):
     while _continuous:
@@ -262,25 +255,33 @@ def geventwork(workqueue):
                     method.succ = method.succ + 1
                 elif isinstance(result, types.GeneratorType):
                     try:
-                        hasattr(method, 'index') and handleIndex(workqueue, result, method, args, kwargs, priority, methodId, times)
+                        hasattr(method, 'index') and handleIndex(
+                            workqueue, result, method, args, kwargs, priority, methodId, times)
                         for retvar in result:
-                            handleNextStore(workqueue, retvar, method, hasattr(method, 'next'), hasattr(method, 'store'))
+                            handleNextStore(
+                                workqueue, retvar, method, hasattr(method, 'next'), hasattr(method, 'store'))
                         method.succ = method.succ + 1
                     except TimeoutError:
-                        handleExcept(workqueue, method, args, kwargs, times, methodId, method.timeout)
+                        handleExcept(
+                            workqueue, method, args, kwargs, times, methodId, method.timeout)
                     except:
-                        handleExcept(workqueue, method, args, kwargs, times, methodId, method.fail)
+                        handleExcept(
+                            workqueue, method, args, kwargs, times, methodId, method.fail)
                 else:
-                    handleNextStore(workqueue, result, method, hasattr(method, 'next'), hasattr(method, 'store'))
+                    handleNextStore(
+                        workqueue, result, method, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
-                handleExcept(workqueue, method, args, kwargs, times, methodId, method.timeout)
+                handleExcept(
+                    workqueue, method, args, kwargs, times, methodId, method.timeout)
             except:
-                handleExcept(workqueue, method, args, kwargs, times, methodId, method.fail)
+                handleExcept(
+                    workqueue, method, args, kwargs, times, methodId, method.fail)
             finally:
                 workqueue.task_done()
                 timer.cancel()
                 del timer
+
 
 class Foreverworker(threading.Thread):
 
@@ -428,30 +429,17 @@ class Workflows(object):
 
     def extractFlow(self):
         def imitate(p, b):
-            if hasattr(b, '__name__'):
-                pass
-            else:
+            if not hasattr(b, '__name__'):
                 b.__name__ = str(p).split(' at ')[0].split(' of ')[0].split(
                     '<function ')[-1].split('.')[-1].replace(' ', '').replace('>', '')
             b.succ = 0
             b.fail = 0
             b.timeout = 0
-            if hasattr(p, 'index'):
-                b.index = p.index
-            if hasattr(p, 'store'):
-                b.store = p.store
-            if hasattr(p, 'retry'):
-                b.retry = p.retry
-            else:
-                b.retry = RETRY
-            if hasattr(p, 'timelimit'):
-                b.timelimit = p.timelimit
-            else:
-                b.timelimit = TIMELIMIT
-            if hasattr(p, 'priority'):
-                b.priority = p.priority
-            else:
-                b.priority = None
+            hasattr(p, 'index') and setattr(b, 'index', p.index)
+            hasattr(p, 'store') and setattr(b, 'store', p.store)
+            b.retry = (hasattr(p, 'retry') and p.retry) or RETRY
+            b.timelimit = (hasattr(p, 'timelimit') and p.timelimit) or TIMELIMIT
+            b.priority = (hasattr(p, 'priority') and p.priority) or None
         if self.__flowcount['inner']:
             print "Inner workflow can be set once and has been set."
         else:
