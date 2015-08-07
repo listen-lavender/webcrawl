@@ -98,7 +98,7 @@ def requformat(r, coding, dirtys, myfilter, format, filepath):
     contents = r.content
     contents = contents.decode(coding, 'ignore').encode('utf-8')
     if not code in [200, 301, 302]:
-        raise URLFailureException(url, code)
+        raise URLFailureException(r.url, code)
     for one in dirtys:
         contents = contents.replace(one[0], one[1])
     contents = myfilter(contents)
@@ -152,10 +152,10 @@ def requHead(url, headers=None, cookies=None, proxies=None, timeout=10, allow_re
     """
     """
     if s is None:
-        r = requests.head(url, data=data, headers=headers, cookies=cookies,
+        r = requests.head(url, headers=headers, cookies=cookies,
                           proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     else:
-        r = s.head(url, data=data, headers=headers, cookies=cookies,
+        r = s.head(url, headers=headers, cookies=cookies,
                    proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     return requformat(r, coding, dirtys, myfilter, format, filepath)
 
@@ -189,13 +189,13 @@ def tree(content, coding='unicode', marktype='HTML'):
 def treeHtml(content, coding='unicode'):
     """
     """
-    tree(content, coding, 'HTML')
+    return tree(content, coding, 'HTML')
 
 
 def treeXml(content, coding='unicode'):
     """
     """
-    tree(content, coding, 'XML')
+    return tree(content, coding, 'XML')
 
 if __name__ == '__main__':
     print 'start...'
