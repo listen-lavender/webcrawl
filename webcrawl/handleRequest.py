@@ -19,10 +19,13 @@ from character import unicode2utf8
 from work import MyLocal
 from exception import URLFailureException, MarktypeError, FormatError
 
-myproxys = []
+proxies = []
 
-CONS = MyLocal(
-    PROXYURL='', PROXYTIMEOUT=30, USEPROXYS=False, FILEMAKE=True, FILEDIR='')
+REQU = MyLocal(timeout=30)
+
+PROXY = MyLocal(url='', fun=lambda :[], use=False)
+
+FILE = MyLocal(make=True, dir='')
 
 
 def contentFilter(contents):
@@ -30,34 +33,22 @@ def contentFilter(contents):
 
 
 def chooseProxy():
-    global myproxys
-    if myproxys:
-        return myproxys
-    else:
-        r = requests.get(CONS.PROXYURL)
-        proxys = json.loads(r.content)
-        proxys = unicode2utf8(proxys)
-        proxys.sort(cmp=lambda x, y: cmp(x[2], y[2]))
-        for proxy in proxys:
-            #["50.70.48.217", "8080", 12.131555, "00", "11110"]
-            proxyip, proxyport, speed, area, cls = proxy
-            if float(speed) < 10 and cls.startswith('0'):
-                myproxys.append(proxy)
-            if float(speed) >= 10:
-                break
-        return myproxys
+    global proxies
+    if not proxies:
+        proxies = PROXY.fun()
+    return proxies
 
 
-def byProxys(fun):
+def byProxy(fun):
     @functools.wraps(fun)
     def wrapper(*args, **kwargs):
-        if CONS.USEPROXYS:
-            myproxys = chooseProxy()
-            proxy = random.choice(myproxys)
+        if PROXY.use:
+            proxies = chooseProxy()
+            proxy = random.choice(proxies)
             kwargs['proxies'] = {
-                "http": "http://%s:%s" % (proxy[0], proxy[1])} if not 'proxies' in kwargs else kwargs['proxies']
-            kwargs['timeout'] = CONS.PROXYTIMEOUT if kwargs.get(
-                'timeout') is None else max(kwargs['timeout'], CONS.PROXYTIMEOUT)
+                "http": "http://%s:%s" % (proxy['ip'], proxy['port'])} if not 'proxies' in kwargs else kwargs['proxies']
+            kwargs['timeout'] = REQU.timeout if kwargs.get(
+                'timeout') is None else max(kwargs['timeout'], REQU.timeout)
         return fun(*args, **kwargs)
     return wrapper
 
@@ -114,14 +105,14 @@ def requformat(r, coding, dirtys, myfilter, format, filepath):
         content = r
     else:
         raise FormatError(format)
-    if CONS.FILEMAKE and filepath is not None:
-        fi = open(CONS.FILEDIR + filepath, 'w')
+    if FILE.make and filepath is not None:
+        fi = open(FILE.dir + filepath, 'w')
         fi.write(contents)
         fi.close()
     return content
 
 
-@byProxys
+@byProxy
 def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
     """
@@ -134,7 +125,7 @@ def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_red
     return requformat(r, coding, dirtys, myfilter, format, filepath)
 
 
-@byProxys
+@byProxy
 def requPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
     """
@@ -147,7 +138,7 @@ def requPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, al
     return requformat(r, coding, dirtys, myfilter, format, filepath)
 
 
-@byProxys
+@byProxy
 def requHead(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
     """
@@ -167,8 +158,8 @@ def requImg(url, tofile=None):
     img_data = urllib2.urlopen(r).read()
     img_buffer = StringIO.StringIO(img_data)
     img = Image.open(img_buffer)
-    if CONS.FILEMAKE and tofile is not None:
-        img.save(CONS.FILEDIR + tofile)
+    if FILE.make and tofile is not None:
+        img.save(FILE.dir + tofile)
     return img
 
 
