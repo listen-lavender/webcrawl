@@ -15,13 +15,15 @@ import threading
 
 from lxml import etree as ET
 from lxml import html as HT
+from lxml.etree import Element
+
 from character import unicode2utf8
 from work import MyLocal
 from exception import URLFailureException, MarktypeError, FormatError
 
 proxies = []
 
-REQU = MyLocal(timeout=30)
+RQT = MyLocal(timeout=30)
 
 PROXY = MyLocal(url='', fun=lambda :[], use=False)
 
@@ -47,11 +49,56 @@ def byProxy(fun):
             proxy = random.choice(proxies)
             kwargs['proxies'] = {
                 "http": "http://%s:%s" % (proxy['ip'], proxy['port'])} if not 'proxies' in kwargs else kwargs['proxies']
-            kwargs['timeout'] = REQU.timeout if kwargs.get(
-                'timeout') is None else max(kwargs['timeout'], REQU.timeout)
+            kwargs['timeout'] = RQT.timeout if kwargs.get(
+                'timeout') is None else max(kwargs['timeout'], RQT.timeout)
         return fun(*args, **kwargs)
     return wrapper
 
+def jsontoxml(d, r=None):
+    if r is None:
+        r = Element('root')
+    for k, v in d.items():
+        l = Element(k)
+        if v is None:
+            continue
+        elif type(v) == list:
+            l = Element(k+'s')
+            for o in v:
+                e = Element(k)
+                if o is None:
+                    continue
+                if type(o) == list:
+                    raise "No nested list."
+                elif type(o) == dict:
+                    l.append(jsontoxml(o, e))
+                else:
+                    e.set('type', type(o).__name__)
+                    e.set('text', unicode(o))
+                    l.append(e)
+            r.append(l)
+        elif type(v) == dict:
+            r.append(jsontoxml(v, l))
+        else:
+            e = Element(k)
+            e.set('type', type(v).__name__)
+            e.set('text', unicode(v))
+            e.text = ''
+            r.append(e)
+    return r
+
+class XpathJson(dict):
+
+    def __init__(self, **kwargs):
+        # self.__dict__ = dict(self.__dict__, **kwargs)
+        self.__dict__.update(**kwargs)
+        self.__xml = jsontoxml(self.__dict__)
+    
+    def xpath(self, path):
+        result = self.__xml.xpath(path)
+        if result:
+            return result[0]
+        else:
+            return None
 
 def getNodeContent(node, consrc, marktype='HTML'):
     """
@@ -83,6 +130,12 @@ def getXmlNodeContent(node, consrc):
     """
     return getNodeContent(node, consrc, 'XML')
 
+def getJsonNodeContent(node, consrc):
+    """
+    """
+    consrc = {'ATTR':'text'}
+    return getNodeContent(node, consrc, 'XML')
+
 
 def requformat(r, coding, dirtys, myfilter, format, filepath):
     code = r.status_code
@@ -96,7 +149,7 @@ def requformat(r, coding, dirtys, myfilter, format, filepath):
     if format == 'HTML':
         content = HT.fromstring(contents.decode('utf-8'))
     elif format == 'JSON':
-        content = unicode2utf8(json.loads(contents.decode('utf-8')))
+        content = XpathJson(**unicode2utf8(json.loads(contents.decode('utf-8'))))
     elif format == 'XML':
         content = ET.fromstring(contents)
     elif format == 'TEXT':
@@ -190,5 +243,8 @@ def treeXml(content, coding='unicode'):
 
 if __name__ == '__main__':
     print 'start...'
-    print 'hkhkh', requHead('http://www.homeinns.com/hotel/027060')
+    from lxml.etree import tostring
+    abc = {'a':{'a1':1, 'a2':'a', 'a3':[1,2,3]}, 'b':[5,6], 'c':'abc'}
+    abc = jsontoxml(abc)
+    print abc.xpath('.//a3')
     print 'end...'
