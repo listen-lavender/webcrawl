@@ -16,7 +16,7 @@ from Queue import Queue
 from gevent import monkey, Timeout
 
 
-from queue import BeanstalkdQueue, GPriorjoinQueue, TPriorjoinQueue
+from wildqueue import BQ, GPQ, TPQ
 from exception import TimeoutError
 
 
@@ -275,7 +275,7 @@ def geventwork(workqueue):
                 handleExcept(
                     workqueue, method, args, kwargs, times, methodName, methodId, method.fail)
             finally:
-                workqueue.task_done(task=(priority, methodName, methodId, times, args, kwargs, taskid))
+                workqueue.task_done(item=(priority, methodName, methodId, times, args, kwargs, taskid))
                 timer.cancel()
                 del timer
 
@@ -312,9 +312,9 @@ class Workflows(object):
             monkey.patch_all(Event=True)
             gid = threading._get_ident()
             threading._active[gid] = threading._active[MTID]
-            PriorjoinQueue = GPriorjoinQueue
+            PriorjoinQueue = GPQ
         else:
-            PriorjoinQueue = TPriorjoinQueue
+            PriorjoinQueue = TPQ
         self.__flowcount = {'inner': set(), 'outer': set()}
         self.__worknum = worknum
         self.__queuetype = queuetype
@@ -325,7 +325,7 @@ class Workflows(object):
             if self.__queuetype == 'P':
                 self.queue = PriorjoinQueue()
             else:
-                self.queue = BeanstalkdQueue(tube=str(id(self)))
+                self.queue = BQ(tube=str(id(self)))
         except:
             print 'Wrong type of queue, please choose P or B or start your beanstalkd service.'
         self.workers = []
@@ -338,7 +338,7 @@ class Workflows(object):
                     worker = functools.partial(geventwork, self.queue)
                 else:
                     worker = functools.partial(
-                        geventwork, BeanstalkdQueue(tube=str(id(self))))
+                        geventwork, BQ(tube=str(id(self))))
                 self.workers.append(worker)
         else:
             from time import sleep
@@ -346,7 +346,7 @@ class Workflows(object):
                 if self.__queuetype == 'P':
                     worker = Foreverworker(self.queue)
                 else:
-                    worker = Foreverworker(BeanstalkdQueue(tube=str(id(self))))
+                    worker = Foreverworker(BQ(tube=str(id(self))))
                 self.workers.append(worker)
 
     def tinder(self, flow):

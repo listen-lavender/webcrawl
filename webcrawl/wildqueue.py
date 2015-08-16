@@ -8,7 +8,7 @@ from gevent.queue import Queue
 
 from character import unicode2utf8
 
-class BeanstalkdQueue(object):
+class BQ(object):
     conditions = {}
 
     def __init__(self, host='localhost', port=11300, tube='default', timeout=30, items=None, unfinished_tasks=None):
@@ -17,13 +17,13 @@ class BeanstalkdQueue(object):
         self.tube = tube
         self.bc.use(self.tube)
         self.bc.watch(self.tube)
-        if self.tube in BeanstalkdQueue.conditions:
+        if self.tube in BQ.conditions:
             pass
         else:
-            BeanstalkdQueue.conditions[self.tube] = {
+            BQ.conditions[self.tube] = {
                 'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event()}
             self.clear()
-            BeanstalkdQueue.conditions[self.tube]['event'].set()
+            BQ.conditions[self.tube]['event'].set()
         if items:
             for item in items:
                 self.put(item)
@@ -36,8 +36,8 @@ class BeanstalkdQueue(object):
 
     def put(self, item):
         index = self.bc.put(pickle.dumps(item), priority=item[0])
-        BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] += 1
-        BeanstalkdQueue.conditions[self.tube]['event'].clear()
+        BQ.conditions[self.tube]['unfinished_tasks'] += 1
+        BQ.conditions[self.tube]['event'].clear()
         self.setState(item[-1], 'status', 2)
         self.setState(item[-1], 'index', index)
 
@@ -56,7 +56,7 @@ class BeanstalkdQueue(object):
         if item:
             index = self.bc.put(pickle.dumps(item), priority=item[0])
             self.unfinished_tasks += 1
-            BeanstalkdQueue.conditions[self.tube]['event'].clear()
+            BQ.conditions[self.tube]['event'].clear()
             self.setState(item[-1], 'status', 2)
             self.setState(item[-1], 'index', index)
 
@@ -83,20 +83,20 @@ class BeanstalkdQueue(object):
             del item
 
     def task_done(self, item=None, force=False):
-        if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
+        if BQ.conditions[self.tube]['unfinished_tasks'] <= 0:
             raise ValueError('task_done() called too many times')
-        BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] -= 1
+        BQ.conditions[self.tube]['unfinished_tasks'] -= 1
         if item:
             self.recycle(item)
             self.setState(item[-1], 'status', 0)
             self.setState(item[-1], 'index', -1)
             self.setState(item[-1], 'item', item)
-        if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] == 0 or force:
+        if BQ.conditions[self.tube]['unfinished_tasks'] == 0 or force:
             # if self.empty() or force:
-            BeanstalkdQueue.conditions[self.tube]['event'].set()
+            BQ.conditions[self.tube]['event'].set()
 
     def join(self):
-        BeanstalkdQueue.conditions[self.tube]['event'].wait()
+        BQ.conditions[self.tube]['event'].wait()
 
     def recycle(self, item):
         pass
@@ -108,12 +108,12 @@ class BeanstalkdQueue(object):
         pass
 
 
-class GPriorjoinQueue(Queue):
+class GPQ(Queue):
 
     def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
         from gevent.event import Event
         # Queue.__init__(self, maxsize, items)
-        super(GPriorjoinQueue, self).__init__(maxsize, items)
+        super(GPQ, self).__init__(maxsize, items)
         self.unfinished_tasks = unfinished_tasks or 0
         self._cond = Event()
         self._cond.set()
@@ -154,7 +154,7 @@ class GPriorjoinQueue(Queue):
         return item
 
     def put(self, item, block=True, timeout=None):
-        super(GPriorjoinQueue, self).put(item, block, timeout)
+        super(GPQ, self).put(item, block, timeout)
         return self.incount - 1
 
     def redo(self, taskid, heappush=heapq.heappush):
@@ -200,7 +200,7 @@ class GPriorjoinQueue(Queue):
     def getState(self, taskid, key):
         pass
 
-class TPriorjoinQueue(PriorityQueue):
+class TPQ(PriorityQueue):
 
     def _init(self, maxsize=None, items=None, unfinished_tasks=None):
         self.maxsize = maxsize or 0
