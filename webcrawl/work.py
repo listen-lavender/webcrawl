@@ -183,6 +183,9 @@ def assure(method):
     not hasattr(method, 'timelimit') and setattr(method, 'timelimit', TIMELIMIT)
     not hasattr(method, 'priority') and setattr(method, 'priority', None)
 
+def mark(*item):
+    return tuple(list(item) + [hash(str(item))])
+
 class Nevertimeout(object):
 
     def __init__(self):
@@ -191,8 +194,7 @@ class Nevertimeout(object):
     def cancel(self):
         pass
 
-
-def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, times):
+def handleIndex(workqueue, result, method, args, kwargs, priority, methodName, methodId, times):
     index = result.next()
     if index is not None and times == 0:
         if type(method.index) == int:
@@ -206,30 +208,25 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, tim
                 kwargs, **{method.index: index})
         else:
             raise "Incorrect arguments."
-        workqueue.put((priority, methodId, 0, indexargs, indexkwargs))
+        workqueue.put(mark(*(priority, methodName, methodId, 0, indexargs, indexkwargs)))
 
 
 def handleNextStore(workqueue, retvar, method, hasnext=False, hasstore=False):
     if type(retvar) == dict:
-        hasnext and workqueue.put(
-            (method.next.priority, id(method.next), 0, (), retvar))
-        hasstore and workqueue.put(
-            (method.store.priority, id(method.store), 0, (), {'obj': retvar['obj']}))
+        hasnext and workqueue.put(mark(*(method.next.priority, method.next.__name__, id(method.next), 0, (), retvar)))
+        hasstore and workqueue.put(mark(*(method.store.priority, method.store.__name__, id(method.store), 0, (), {'obj': retvar['obj']})))
     elif type(retvar) == tuple:
-        hasnext and workqueue.put(
-            (method.next.priority, id(method.next), 0, retvar, {}))
-        hasstore and workqueue.put(
-            (method.store.priority, id(method.store), 0, (retvar[0],), {}))
+        hasnext and workqueue.put(mark(*(method.next.priority, method.next.__name__, id(method.next), 0, retvar, {})))
+        hasstore and workqueue.put(mark(*(method.store.priority, method.store.__name__, id(method.store), 0, (retvar[0],), {})))
     else:
-        hasstore and workqueue.put(
-            (method.store.priority, id(method.store), 0, (retvar,), {}))
+        hasstore and workqueue.put(mark(*(method.store.priority, method.store.__name__, id(method.store), 0, (retvar,), {})))
         # raise "Incorrect result for next function."
 
 
-def handleExcept(workqueue, method, args, kwargs, times, methodId, count='fail'):
+def handleExcept(workqueue, method, args, kwargs, times, methodName, methodId, count='fail'):
     if times < method.retry:
         times = times + 1
-        workqueue.put((priority, methodId, times, args, kwargs))
+        workqueue.put(mark(*(priority, methodName, methodId, times, args, kwargs)))
     else:
         count = count + 1
         t, v, b = sys.exc_info()
@@ -244,7 +241,7 @@ def geventwork(workqueue):
             sleep(0.1)
         else:
             timer = Nevertimeout()
-            priority, methodId, times, args, kwargs = workqueue.get()
+            priority, methodName, methodId, times, args, kwargs, taskid = workqueue.get()
             method = ctypes.cast(methodId, ctypes.py_object).value
             try:
                 if method.timelimit > 0:
@@ -256,29 +253,29 @@ def geventwork(workqueue):
                 elif isinstance(result, types.GeneratorType):
                     try:
                         hasattr(method, 'index') and handleIndex(
-                            workqueue, result, method, args, kwargs, priority, methodId, times)
+                            workqueue, result, method, args, kwargs, priority, methodName, methodId, times)
                         for retvar in result:
                             handleNextStore(
                                 workqueue, retvar, method, hasattr(method, 'next'), hasattr(method, 'store'))
                         method.succ = method.succ + 1
                     except TimeoutError:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodId, method.timeout)
+                            workqueue, method, args, kwargs, times, methodName, methodId, method.timeout)
                     except:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodId, method.fail)
+                            workqueue, method, args, kwargs, times, methodName, methodId, method.fail)
                 else:
                     handleNextStore(
                         workqueue, result, method, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodId, method.timeout)
+                    workqueue, method, args, kwargs, times, methodName, methodId, method.timeout)
             except:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodId, method.fail)
+                    workqueue, method, args, kwargs, times, methodName, methodId, method.fail)
             finally:
-                workqueue.task_done()
+                workqueue.task_done(task=(priority, methodName, methodId, times, args, kwargs, taskid))
                 timer.cancel()
                 del timer
 
@@ -484,8 +481,9 @@ class Workflows(object):
 
     def fire(self, flow, *args, **kwargs):
         if self.__flows[flow]['tinder'] is not None:
-            self.queue.put((self.__flows[flow]['tinder'].priority, id(
-                self.__flows[flow]['tinder']), 0, args, kwargs))
+            tinder = (self.__flows[flow]['tinder'].priority, self.__flows[flow]['tinder'].__name__, id(
+                self.__flows[flow]['tinder']), 0, args, kwargs)
+            self.queue.put(mark(*tinder))
             for worker in self.workers:
                 if self.__worktype == 'COROUTINE':
                     gevent.spawn(worker)

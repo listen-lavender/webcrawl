@@ -1,13 +1,12 @@
 #!/usr/bin/python
 # coding=utf-8
-import json
+import pickle
 import heapq
 import beanstalkc
 from Queue import PriorityQueue
 from gevent.queue import Queue
 
 from character import unicode2utf8
-
 
 class BeanstalkdQueue(object):
     conditions = {}
@@ -29,18 +28,22 @@ class BeanstalkdQueue(object):
             for item in items:
                 self.put(item)
 
+    def __repr__(self):
+        return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
+
     def put(self, item):
-        priority, methodId, times, args, kwargs = item
-        self.bc.put(json.dumps({'priority': priority, 'methodId': methodId,
-                                'times': times, 'args': args, 'kwargs': kwargs}), priority=priority)
+        priority, methodName, methodId, times, args, kwargs, taskid = item
+        self.bc.put(pickle.dumps({'priority': priority, 'methodName': methodName, 'methodId': methodId,
+                                'times': times, 'args': args, 'kwargs': kwargs, 'taskid':taskid}), priority=priority)
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] += 1
         BeanstalkdQueue.conditions[self.tube]['event'].clear()
 
     def get(self):
         item = self.bc.reserve()
         item.delete()
-        item = unicode2utf8(json.loads(item.body))
-        return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'])
+        item = pickle.loads(item.body)
+        iitem = (item['priority'], item['methodName'], item['methodId'], item['times'], item['args'], item['kwargs'], item['taskid'])
+        return iitem
 
     def empty(self):
         if self.bc.stats_tube(self.tube)['current-jobs-ready'] == 0:
@@ -51,10 +54,17 @@ class BeanstalkdQueue(object):
     def copy(self):
         pass
 
-    def task_done(self, force=False):
+    def clear(self):
+        while not self.empty():
+            item = self.get()
+            del item
+
+    def task_done(self, task=None, force=False):
         if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
             raise ValueError('task_done() called too many times')
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] -= 1
+        if task:
+            self.recycle(task)
         if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] == 0 or force:
             # if self.empty() or force:
             BeanstalkdQueue.conditions[self.tube]['event'].set()
@@ -62,13 +72,8 @@ class BeanstalkdQueue(object):
     def join(self):
         BeanstalkdQueue.conditions[self.tube]['event'].wait()
 
-    def clear(self):
-        while not self.empty():
-            item = self.get()
-            del item
-
-    def __repr__(self):
-        return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
+    def recycle(self, task):
+        pass
 
 
 class GPriorjoinQueue(Queue):
@@ -105,16 +110,20 @@ class GPriorjoinQueue(Queue):
     def _get(self, heappop=heapq.heappop):
         return heappop(self.queue)
 
-    def task_done(self, force=False):
+    def task_done(self, task=None, force=False):
         if self.unfinished_tasks <= 0:
             raise ValueError('task_done() called too many times')
         self.unfinished_tasks -= 1
+        if task:
+            self.recycle(task)
         if self.unfinished_tasks == 0 or force:
             self._cond.set()
 
     def join(self):
         self._cond.wait()
 
+    def recycle(self, task):
+        pass
 
 class TPriorjoinQueue(PriorityQueue):
 
@@ -148,15 +157,20 @@ class TPriorjoinQueue(PriorityQueue):
     def get(self, heappop=heapq.heappop):
         return heappop(self.queue)
 
-    def task_done(self, force=False):
+    def task_done(self, task=None, force=False):
         if self.unfinished_tasks <= 0:
             raise ValueError('task_done() called too many times')
         self.unfinished_tasks -= 1
+        if task:
+            self.recycle(task)
         if self.unfinished_tasks == 0 or force:
             self._cond.set()
 
     def join(self):
         self._cond.wait()
+
+    def recycle(self, task):
+        pass
 
 if __name__ == '__main__':
     from gevent.queue import JoinableQueue
