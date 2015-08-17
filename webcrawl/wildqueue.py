@@ -87,7 +87,6 @@ class BQ(object):
             raise ValueError('task_done() called too many times')
         BQ.conditions[self.tube]['unfinished_tasks'] -= 1
         if item:
-            self.recycle(item)
             self.setState(item[-1], 'status', 0)
             self.setState(item[-1], 'index', -1)
             self.setState(item[-1], 'item', item)
@@ -97,9 +96,6 @@ class BQ(object):
 
     def join(self):
         BQ.conditions[self.tube]['event'].wait()
-
-    def recycle(self, item):
-        pass
 
     def setState(self, taskid, key, val):
         pass
@@ -181,7 +177,6 @@ class GPQ(Queue):
             raise ValueError('task_done() called too many times')
         self.unfinished_tasks -= 1
         if item:
-            self.recycle(item)
             self.setState(item[-1], 'status', 0)
             self.setState(item[-1], 'index', -1)
             self.setState(item[-1], 'item', item)
@@ -190,9 +185,6 @@ class GPQ(Queue):
 
     def join(self):
         self._cond.wait()
-
-    def recycle(self, item):
-        pass
 
     def setState(self, taskid, key, val):
         pass
@@ -266,7 +258,6 @@ class TPQ(PriorityQueue):
             raise ValueError('task_done() called too many times')
         self.unfinished_tasks -= 1
         if item:
-            self.recycle(item)
             self.setState(item[-1], 'status', 0)
             self.setState(item[-1], 'index', -1)
             self.setState(item[-1], 'item', item)
@@ -275,9 +266,6 @@ class TPQ(PriorityQueue):
 
     def join(self):
         self._cond.wait()
-
-    def recycle(self, item):
-        pass
 
     def setState(self, taskid, key, val):
         pass

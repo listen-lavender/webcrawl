@@ -15,8 +15,6 @@ MTID = threading._get_ident()  # id of main thread
 from Queue import Queue
 from gevent import monkey, Timeout
 
-
-from wildqueue import BQ, GPQ, TPQ
 from exception import TimeoutError
 
 
@@ -307,7 +305,11 @@ class Workflows(object):
         任务流
     """
 
-    def __init__(self, worknum, queuetype, worktype):
+    def __init__(self, worknum, queuetype, worktype, trace=False):
+        if trace:
+            from docilequeue import BQ, GPQ, TPQ
+        else:
+            from wildqueue import BQ, GPQ, TPQ
         if worktype == 'COROUTINE':
             monkey.patch_all(Event=True)
             gid = threading._get_ident()
@@ -337,8 +339,7 @@ class Workflows(object):
                 if self.__queuetype == 'P':
                     worker = functools.partial(geventwork, self.queue)
                 else:
-                    worker = functools.partial(
-                        geventwork, BQ(tube=str(id(self))))
+                    worker = functools.partial(geventwork, BQ(tube=str(id(self))))
                 self.workers.append(worker)
         else:
             from time import sleep
