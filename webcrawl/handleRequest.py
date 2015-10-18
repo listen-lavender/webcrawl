@@ -12,6 +12,8 @@ import Image
 import StringIO
 import functools
 import threading
+import urlparse
+import time
 
 from lxml import etree as ET
 from lxml import html as HT
@@ -38,18 +40,26 @@ def chooseProxy():
         proxies = PROXY.fun()
     return proxies
 
+def logProxy(pid, elapse):
+    pass
 
 def byProxy(fun):
     @functools.wraps(fun)
     def wrapper(*args, **kwargs):
+        proxy = None
         if PROXY.use:
+            start = time.time()
             proxies = chooseProxy()
             proxy = random.choice(proxies)
             kwargs['proxies'] = {
                 "http": "http://%s:%s" % (proxy['ip'], proxy['port'])} if not 'proxies' in kwargs else kwargs['proxies']
             kwargs['timeout'] = REQU.timeout if kwargs.get(
                 'timeout') is None else max(kwargs['timeout'], REQU.timeout)
-        return fun(*args, **kwargs)
+        result = fun(*args, **kwargs)
+        if proxy:
+            end = time.time()
+            logProxy(proxy['id'], round(end-start, 6))
+        return result
     return wrapper
 
 
@@ -83,6 +93,10 @@ def getXmlNodeContent(node, consrc):
     """
     return getNodeContent(node, consrc, 'XML')
 
+def getJsonNodeContent(node, consrc):
+    """
+    """
+    return ''
 
 def requformat(r, coding, dirtys, myfilter, format, filepath):
     code = r.status_code
@@ -188,7 +202,33 @@ def treeXml(content, coding='unicode'):
     """
     return tree(content, coding, 'XML')
 
+def parturl(url):
+    queryparas = dict(urlparse.parse_qsl(urlparse.urlparse(url).query))
+    routeparas = url.split('//')[-1]
+    routeparas = routeparas[routeparas.index('/')+1:]
+    routeparas = routeparas.split('?')[0]
+    routeparas = tuple(routeparas.split('/'))
+    return routeparas, queryparas
+
+def ensureurl(refurl, objurl):
+    """
+    >>> ensureurl('http://www.homeinns.com/hotel', 'http://www.homeinns.com/beijing')
+    'http://www.homeinns.com/beijing'
+    >>> ensureurl('http://www.homeinns.com/hotel', '/beijing')
+    'http://www.homeinns.com/beijing'
+    >>> ensureurl('http://www.homeinns.com/hotel', 'beijing')
+    'http://www.homeinns.com/beijing'
+    """
+    if objurl.strip() in ('', '#'):
+        return ''
+    elif objurl.startswith('http'):
+        return objurl
+    elif objurl.startswith('/'):
+        refurl = refurl.replace('//', '{$$}')
+        return ''.join([refurl[:refurl.index('/')].replace('{$$}', '//'), objurl])
+    else:
+        return '/'.join([refurl[:refurl.rindex('/')], objurl])
+
 if __name__ == '__main__':
     print 'start...'
-    print 'hkhkh', requHead('http://www.homeinns.com/hotel/027060')
     print 'end...'

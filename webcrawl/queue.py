@@ -1,12 +1,13 @@
 #!/usr/bin/python
 # coding=utf-8
-import pickle
+import json
 import heapq
 import beanstalkc
 from Queue import PriorityQueue
 from gevent.queue import Queue
 
 from character import unicode2utf8
+
 
 class BeanstalkdQueue(object):
     conditions = {}
@@ -28,48 +29,18 @@ class BeanstalkdQueue(object):
             for item in items:
                 self.put(item)
 
-    def __repr__(self):
-        return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
-
-    def copy(self):
-        pass
-
     def put(self, item):
-        index = self.bc.put(pickle.dumps(item), priority=item[0])
+        priority, methodId, times, args, kwargs = item
+        self.bc.put(json.dumps({'priority': priority, 'methodId': methodId,
+                                'times': times, 'args': args, 'kwargs': kwargs}), priority=priority)
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] += 1
         BeanstalkdQueue.conditions[self.tube]['event'].clear()
-        self.setState(item[-1], 'status', 2)
-        self.setState(item[-1], 'index', index)
 
     def get(self):
         item = self.bc.reserve()
         item.delete()
-        item = pickle.loads(item.body)
-        if self.getState(item[-1], 'status') is None or self.getState(item[-1], 'status') == 2:
-            self.setState(item[-1], 'status', 1)
-        else:
-            item = None
-        return item
-
-    def redo(self, taskid, heappush=heapq.heappush):
-        item = self.getState(taskid, 'item')
-        if item:
-            index = self.bc.put(pickle.dumps(item), priority=item[0])
-            self.unfinished_tasks += 1
-            BeanstalkdQueue.conditions[self.tube]['event'].clear()
-            self.setState(item[-1], 'status', 2)
-            self.setState(item[-1], 'index', index)
-
-    def select(self, taskid, heappop=heapq.heappop):
-        index = self.getState(taskid, 'index')
-        item = None
-        if index:
-            item = self.bc.peek(index)
-            item.delete()
-            item = pickle.loads(item.body)
-            if self.getState(item[-1], 'status') == 2:
-                self.setState(item[-1], 'status', 1)
-        return item
+        item = unicode2utf8(json.loads(item.body))
+        return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'])
 
     def empty(self):
         if self.bc.stats_tube(self.tube)['current-jobs-ready'] == 0:
@@ -77,20 +48,13 @@ class BeanstalkdQueue(object):
         else:
             return False
 
-    def clear(self):
-        while not self.empty():
-            item = self.get()
-            del item
+    def copy(self):
+        pass
 
-    def task_done(self, item=None, force=False):
+    def task_done(self, force=False):
         if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
             raise ValueError('task_done() called too many times')
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] -= 1
-        if item:
-            self.recycle(item)
-            self.setState(item[-1], 'status', 0)
-            self.setState(item[-1], 'index', -1)
-            self.setState(item[-1], 'item', item)
         if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] == 0 or force:
             # if self.empty() or force:
             BeanstalkdQueue.conditions[self.tube]['event'].set()
@@ -98,27 +62,23 @@ class BeanstalkdQueue(object):
     def join(self):
         BeanstalkdQueue.conditions[self.tube]['event'].wait()
 
-    def recycle(self, item):
-        pass
+    def clear(self):
+        while not self.empty():
+            item = self.get()
+            del item
 
-    def setState(self, taskid, key, val):
-        pass
-
-    def getState(self, taskid, key):
-        pass
+    def __repr__(self):
+        return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
 
 
 class GPriorjoinQueue(Queue):
 
     def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
         from gevent.event import Event
-        # Queue.__init__(self, maxsize, items)
-        super(GPriorjoinQueue, self).__init__(maxsize, items)
+        Queue.__init__(self, maxsize, items)
         self.unfinished_tasks = unfinished_tasks or 0
         self._cond = Event()
         self._cond.set()
-        self.incount = 0
-        self.outcount = 0
 
     def _init(self, maxsize, items=None):
         if items:
@@ -138,67 +98,23 @@ class GPriorjoinQueue(Queue):
 
     def _put(self, item, heappush=heapq.heappush):
         heappush(self.queue, item)
-        self.incount += 1
+        # Queue._put(self, item)
         self.unfinished_tasks += 1
         self._cond.clear()
-        self.setState(item[-1], 'status', 2)
-        self.setState(item[-1], 'index', self.incount - 1)
 
     def _get(self, heappop=heapq.heappop):
-        item = heappop(self.queue)
-        self.outcount += 1
-        if self.getState(item[-1], 'status') is None or self.getState(item[-1], 'status') == 2:
-            self.setState(item[-1], 'status', 1)
-        else:
-            item = None
-        return item
+        return heappop(self.queue)
 
-    def put(self, item, block=True, timeout=None):
-        super(GPriorjoinQueue, self).put(item, block, timeout)
-        return self.incount - 1
-
-    def redo(self, taskid, heappush=heapq.heappush):
-        item = self.getState(taskid, 'item')
-        if item:
-            heappush(self.queue, item)
-            self.incount += 1
-            self.unfinished_tasks += 1
-            self._cond.clear()
-            self.setState(item[-1], 'status', 2)
-            self.setState(item[-1], 'index', self.incount - 1)
-
-    def select(self, taskid, heappop=heapq.heappop):
-        index = self.getState(taskid, 'index')
-        item = None
-        if index:
-            item = self.queue[index - self.outcount]
-            if self.getState(item[-1], 'status') == 2:
-                self.setState(item[-1], 'status', 1)
-        return item
-
-    def task_done(self, item=None, force=False):
+    def task_done(self, force=False):
         if self.unfinished_tasks <= 0:
             raise ValueError('task_done() called too many times')
         self.unfinished_tasks -= 1
-        if item:
-            self.recycle(item)
-            self.setState(item[-1], 'status', 0)
-            self.setState(item[-1], 'index', -1)
-            self.setState(item[-1], 'item', item)
         if self.unfinished_tasks == 0 or force:
             self._cond.set()
 
     def join(self):
         self._cond.wait()
 
-    def recycle(self, item):
-        pass
-
-    def setState(self, taskid, key, val):
-        pass
-
-    def getState(self, taskid, key):
-        pass
 
 class TPriorjoinQueue(PriorityQueue):
 
@@ -212,8 +128,6 @@ class TPriorjoinQueue(PriorityQueue):
         self.unfinished_tasks = unfinished_tasks or 0
         self._cond = Event()
         self._cond.set()
-        self.incount = 0
-        self.outcount = 0
 
     def copy(self):
         return type(self)(self.maxsize, self.queue, self.unfinished_tasks)
@@ -227,63 +141,22 @@ class TPriorjoinQueue(PriorityQueue):
 
     def put(self, item, heappush=heapq.heappush):
         heappush(self.queue, item)
-        self.incount += 1
+        # Queue._put(self, item)
         self.unfinished_tasks += 1
         self._cond.clear()
-        self.setState(item[-1], 'status', 2)
-        self.setState(item[-1], 'index', self.incount - 1)
 
     def get(self, heappop=heapq.heappop):
-        item = heappop(self.queue)
-        self.outcount += 1
-        if self.getState(item[-1], 'status') is None or self.getState(item[-1], 'status') == 2:
-            self.setState(item[-1], 'status', 1)
-        else:
-            item = None
-        return item
+        return heappop(self.queue)
 
-    def redo(self, taskid, heappush=heapq.heappush):
-        item = self.getState(taskid, 'item')
-        if item:
-            heappush(self.queue, item)
-            self.incount += 1
-            self.unfinished_tasks += 1
-            self._cond.clear()
-            self.setState(item[-1], 'status', 2)
-            self.setState(item[-1], 'index', self.incount - 1)
-
-    def select(self, taskid, heappop=heapq.heappop):
-        index = self.getState(taskid, 'index')
-        item = None
-        if index:
-            item = self.queue[index - self.outcount]
-            if self.getState(item[-1], 'status') == 2:
-                self.setState(item[-1], 'status', 1)
-        return item
-
-    def task_done(self, item=None, force=False):
+    def task_done(self, force=False):
         if self.unfinished_tasks <= 0:
             raise ValueError('task_done() called too many times')
         self.unfinished_tasks -= 1
-        if item:
-            self.recycle(item)
-            self.setState(item[-1], 'status', 0)
-            self.setState(item[-1], 'index', -1)
-            self.setState(item[-1], 'item', item)
         if self.unfinished_tasks == 0 or force:
             self._cond.set()
 
     def join(self):
         self._cond.wait()
-
-    def recycle(self, item):
-        pass
-
-    def setState(self, taskid, key, val):
-        pass
-
-    def getState(self, taskid, key):
-        pass
 
 if __name__ == '__main__':
     from gevent.queue import JoinableQueue

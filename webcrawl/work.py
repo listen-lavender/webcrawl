@@ -15,6 +15,8 @@ MTID = threading._get_ident()  # id of main thread
 from Queue import Queue
 from gevent import monkey, Timeout
 
+
+from queue import BeanstalkdQueue, GPriorjoinQueue, TPriorjoinQueue
 from exception import TimeoutError
 
 
@@ -110,6 +112,14 @@ def store(db, way, update, method):
     return wrap
 
 
+def hashweb():
+    def wrap(fun):
+        @functools.wraps(fun)
+        def wrapped(*args, **kwargs):
+            return fun(*args, **kwargs)
+        return wrapped
+    return wrap
+
 def retry(num=1):
     def wrap(fun):
         fun.retry = num
@@ -181,9 +191,6 @@ def assure(method):
     not hasattr(method, 'timelimit') and setattr(method, 'timelimit', TIMELIMIT)
     not hasattr(method, 'priority') and setattr(method, 'priority', None)
 
-def mark(*item):
-    return tuple(list(item) + [hash(str(item))])
-
 class Nevertimeout(object):
 
     def __init__(self):
@@ -192,9 +199,10 @@ class Nevertimeout(object):
     def cancel(self):
         pass
 
-def handleIndex(workqueue, result, method, args, kwargs, priority, methodName, methodId, times):
+
+def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, times):
     index = result.next()
-    if index is not None and times == 0:
+    if index and times == 0:
         if type(method.index) == int:
             indexargs = list(args)
             indexargs[method.index] = index
@@ -206,25 +214,34 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, methodName, m
                 kwargs, **{method.index: index})
         else:
             raise "Incorrect arguments."
-        workqueue.put(mark(*(priority, methodName, methodId, 0, indexargs, indexkwargs)))
+        workqueue.put((priority, methodId, 0, indexargs, indexkwargs))
 
 
 def handleNextStore(workqueue, retvar, method, hasnext=False, hasstore=False):
-    if type(retvar) == dict:
-        hasnext and workqueue.put(mark(*(method.next.priority, method.next.__name__, id(method.next), 0, (), retvar)))
-        hasstore and workqueue.put(mark(*(method.store.priority, method.store.__name__, id(method.store), 0, (), {'obj': retvar['obj']})))
+    if not retvar:
+        pass
+    elif type(retvar) == dict:
+        hasnext and workqueue.put(
+            (method.next.priority, id(method.next), 0, (), retvar))
+        hasstore and workqueue.put(
+            (method.store.priority, id(method.store), 0, (), {'obj': retvar['obj']}))
     elif type(retvar) == tuple:
-        hasnext and workqueue.put(mark(*(method.next.priority, method.next.__name__, id(method.next), 0, retvar, {})))
-        hasstore and workqueue.put(mark(*(method.store.priority, method.store.__name__, id(method.store), 0, (retvar[0],), {})))
+        hasnext and workqueue.put(
+            (method.next.priority, id(method.next), 0, retvar, {}))
+        hasstore and workqueue.put(
+            (method.store.priority, id(method.store), 0, (retvar[0],), {}))
     else:
-        hasstore and workqueue.put(mark(*(method.store.priority, method.store.__name__, id(method.store), 0, (retvar,), {})))
+        hasnext and workqueue.put(
+            (method.next.priority, id(method.next), 0, (retvar,), {}))
+        hasstore and workqueue.put(
+            (method.store.priority, id(method.store), 0, (retvar,), {}))
         # raise "Incorrect result for next function."
 
 
-def handleExcept(workqueue, method, args, kwargs, times, methodName, methodId, count='fail'):
+def handleExcept(workqueue, method, args, kwargs, times, methodId, count='fail'):
     if times < method.retry:
         times = times + 1
-        workqueue.put(mark(*(priority, methodName, methodId, times, args, kwargs)))
+        workqueue.put((priority, methodId, times, args, kwargs))
     else:
         count = count + 1
         t, v, b = sys.exc_info()
@@ -239,7 +256,7 @@ def geventwork(workqueue):
             sleep(0.1)
         else:
             timer = Nevertimeout()
-            priority, methodName, methodId, times, args, kwargs, taskid = workqueue.get()
+            priority, methodId, times, args, kwargs = workqueue.get()
             method = ctypes.cast(methodId, ctypes.py_object).value
             try:
                 if method.timelimit > 0:
@@ -251,29 +268,29 @@ def geventwork(workqueue):
                 elif isinstance(result, types.GeneratorType):
                     try:
                         hasattr(method, 'index') and handleIndex(
-                            workqueue, result, method, args, kwargs, priority, methodName, methodId, times)
+                            workqueue, result, method, args, kwargs, priority, methodId, times)
                         for retvar in result:
                             handleNextStore(
                                 workqueue, retvar, method, hasattr(method, 'next'), hasattr(method, 'store'))
                         method.succ = method.succ + 1
                     except TimeoutError:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodName, methodId, method.timeout)
+                            workqueue, method, args, kwargs, times, methodId, method.timeout)
                     except:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodName, methodId, method.fail)
+                            workqueue, method, args, kwargs, times, methodId, method.fail)
                 else:
                     handleNextStore(
                         workqueue, result, method, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodName, methodId, method.timeout)
+                    workqueue, method, args, kwargs, times, methodId, method.timeout)
             except:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodName, methodId, method.fail)
+                    workqueue, method, args, kwargs, times, methodId, method.fail)
             finally:
-                workqueue.task_done(item=(priority, methodName, methodId, times, args, kwargs, taskid))
+                workqueue.task_done()
                 timer.cancel()
                 del timer
 
@@ -305,18 +322,14 @@ class Workflows(object):
         任务流
     """
 
-    def __init__(self, worknum, queuetype, worktype, trace=False):
-        if trace:
-            from docilequeue import BQ, GPQ, TPQ
-        else:
-            from wildqueue import BQ, GPQ, TPQ
+    def __init__(self, worknum, queuetype, worktype):
         if worktype == 'COROUTINE':
             monkey.patch_all(Event=True)
             gid = threading._get_ident()
             threading._active[gid] = threading._active[MTID]
-            PriorjoinQueue = GPQ
+            PriorjoinQueue = GPriorjoinQueue
         else:
-            PriorjoinQueue = TPQ
+            PriorjoinQueue = TPriorjoinQueue
         self.__flowcount = {'inner': set(), 'outer': set()}
         self.__worknum = worknum
         self.__queuetype = queuetype
@@ -327,7 +340,7 @@ class Workflows(object):
             if self.__queuetype == 'P':
                 self.queue = PriorjoinQueue()
             else:
-                self.queue = BQ(tube=str(id(self)))
+                self.queue = BeanstalkdQueue(tube=str(id(self)))
         except:
             print 'Wrong type of queue, please choose P or B or start your beanstalkd service.'
         self.workers = []
@@ -339,7 +352,8 @@ class Workflows(object):
                 if self.__queuetype == 'P':
                     worker = functools.partial(geventwork, self.queue)
                 else:
-                    worker = functools.partial(geventwork, BQ(tube=str(id(self))))
+                    worker = functools.partial(
+                        geventwork, BeanstalkdQueue(tube=str(id(self))))
                 self.workers.append(worker)
         else:
             from time import sleep
@@ -347,7 +361,7 @@ class Workflows(object):
                 if self.__queuetype == 'P':
                     worker = Foreverworker(self.queue)
                 else:
-                    worker = Foreverworker(BQ(tube=str(id(self))))
+                    worker = Foreverworker(BeanstalkdQueue(tube=str(id(self))))
                 self.workers.append(worker)
 
     def tinder(self, flow):
@@ -482,9 +496,8 @@ class Workflows(object):
 
     def fire(self, flow, *args, **kwargs):
         if self.__flows[flow]['tinder'] is not None:
-            tinder = (self.__flows[flow]['tinder'].priority, self.__flows[flow]['tinder'].__name__, id(
-                self.__flows[flow]['tinder']), 0, args, kwargs)
-            self.queue.put(mark(*tinder))
+            self.queue.put((self.__flows[flow]['tinder'].priority, id(
+                self.__flows[flow]['tinder']), 0, args, kwargs))
             for worker in self.workers:
                 if self.__worktype == 'COROUTINE':
                     gevent.spawn(worker)
