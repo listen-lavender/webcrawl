@@ -243,7 +243,7 @@ def handleExcept(workqueue, method, args, kwargs, times, methodId, count='fail')
         times = times + 1
         workqueue.put((priority, methodId, times, args, kwargs))
     else:
-        count = count + 1
+        setattr(method, count, getattr(method, count)+1)
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
         _print(method.__name__, ': %s, %s \n' %
@@ -275,20 +275,20 @@ def geventwork(workqueue):
                         method.succ = method.succ + 1
                     except TimeoutError:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodId, method.timeout)
+                            workqueue, method, args, kwargs, times, methodId, 'timeout')
                     except:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodId, method.fail)
+                            workqueue, method, args, kwargs, times, methodId, 'fail')
                 else:
                     handleNextStore(
                         workqueue, result, method, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodId, method.timeout)
+                    workqueue, method, args, kwargs, times, methodId, 'timeout')
             except:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodId, method.fail)
+                    workqueue, method, args, kwargs, times, methodId, 'fail')
             finally:
                 workqueue.task_done()
                 timer.cancel()

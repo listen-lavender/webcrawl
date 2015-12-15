@@ -51,10 +51,10 @@ class SpiderOrigin(Workflows):
                     time.sleep(timeout)
                     self.exit()
                     print 'Time out of %s. ' % str(self.timeout)
-                wather = Thread(
+                watcher = Thread(
                     target=check, args=(self, self.timeout - (time.time() - start)))
-                wather.setDaemon(True)
-                wather.start()
+                watcher.setDaemon(True)
+                watcher.start()
             self.waitComplete()
             # if hasattr(self, 'onway') and self.onway:
             #     self.onway(None, forcexe=True)

@@ -49,3 +49,12 @@ class FormatError(OriginError):
 
     def __del__(self):
         pass
+
+class FormatError(OriginError):
+
+    def __init__(self, format):
+        self.format = format
+        print('Unknow marktype: %s' % self.format)
+
+    def __del__(self):
+        pass
