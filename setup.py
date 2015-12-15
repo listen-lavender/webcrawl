@@ -13,16 +13,14 @@ README = open(os.path.join(here, 'README.rst')).read()
 CHANGES = open(os.path.join(here, 'CHANGES.rst')).read()
 
 requires = [
-    'requests', # 2.2.1
-    # 'lxml', # 3.3.2
-    # 'mysql-python', # 1.2.5
-    'suds', # 0.4
+    'requests>=2.2.1',
+    'lxml>=3.3.2',
     'gitpython', # 0.3.2.RC1
     'gitdb', # 0.5.4
-    'chardet', # 2.2.1
-    # 'PIL',
-    'openpyxl',
-    'mysql-connector-python',
+    'chardet',
+    'PIL',
+    'mysql-connector-python==1.2.3',
+    'MySQL-python==1.2.5',
     ]
 
 webcrawl = __import__('webcrawl')
