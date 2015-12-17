@@ -60,7 +60,7 @@ except:
 _print, logger = logprint(modulename(__file__), modulepath(__file__))
 
 
-class MyLocal(threading.local):
+class MyLocal(object):
 
     def __init__(self, **kwargs):
         # self.__dict__ = dict(self.__dict__, **kwargs)
