@@ -6,7 +6,6 @@
 """
 import json
 import requests
-import random
 import urllib2
 import Image
 import StringIO
@@ -15,33 +14,34 @@ import threading
 import urlparse
 import time
 
+from Queue import Queue
 from lxml import etree as ET
 from lxml import html as HT
 from character import unicode2utf8
 from work import MyLocal
 from exception import URLFailureException, MarktypeError, FormatError
 
-proxies = []
 
 REQU = MyLocal(timeout=30)
 
-PROXY = MyLocal(url='', fun=lambda :[], use=False)
+PROXY = MyLocal(url='', queue=Queue(), choose=lambda :[], log=lambda pid, elapse:None, use=False, worker=None)
 
 FILE = MyLocal(make=True, dir='')
 
+class Proxyworker(threading.Thread):
+
+    def run(self):
+        while True:
+            if PROXY.queue.empty():
+                time.sleep(0.5)
+            else:
+                pid, elapse = PROXY.queue.get()
+                PROXY.log(pid, elapse)
+
+PROXY.worker = Proxyworker()
 
 def contentFilter(contents):
     return contents
-
-
-def chooseProxy():
-    global proxies
-    if not proxies:
-        proxies = PROXY.fun()
-    return proxies
-
-def logProxy(pid, elapse):
-    pass
 
 def byProxy(fun):
     @functools.wraps(fun)
@@ -49,16 +49,15 @@ def byProxy(fun):
         proxy = None
         if PROXY.use:
             start = time.time()
-            proxies = chooseProxy()
-            proxy = random.choice(proxies)
+            proxy = PROXY.choose()
             kwargs['proxies'] = {
-                "http": "http://%s:%s" % (proxy['ip'], proxy['port'])} if not 'proxies' in kwargs else kwargs['proxies']
+                "http": kwargs['proxies'] if 'proxies' in kwargs else "http://%s:%s" % (proxy['ip'], proxy['port'])}
             kwargs['timeout'] = REQU.timeout if kwargs.get(
                 'timeout') is None else max(kwargs['timeout'], REQU.timeout)
         result = fun(*args, **kwargs)
         if proxy:
             end = time.time()
-            logProxy(proxy['id'], round(end-start, 6))
+            PROXY.queue.put(proxy['id'], round(end-start, 6))
         return result
     return wrapper
 
