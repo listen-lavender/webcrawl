@@ -21,8 +21,6 @@ requires = [
     'PIL',
     'gevent',
     'beanstalkc',
-    'mysql-connector-python==1.2.3',
-    'MySQL-python==1.2.5',
     ]
 
 webcrawl = __import__('webcrawl')
