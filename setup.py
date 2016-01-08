@@ -39,6 +39,6 @@ include_package_data=True,
 zip_safe=False,
 install_requires=requires,
 entry_points="",
-scripts=[],
+scripts=['bin/browse'],
 )
 
