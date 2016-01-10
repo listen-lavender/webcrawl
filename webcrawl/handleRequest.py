@@ -43,13 +43,26 @@ class Proxyworker(threading.Thread):
                 PROXY.log(pid, elapse)
 
 class Fakeresponse(object):
-    def __init__(self, url, status_code, content, text, headers, cookies):
+    def __init__(self, url, status_code, content, text, headers, cookies, js_result=None):
         self.url = url
         self.status_code = status_code
         self.content = content
         self.text = text
         self.headers = headers
         self.cookies = cookies
+        self.js_result = js_result
+
+class Fakerequest(object):
+    def __init__(self, url, headers=None, cookies=None, javascript={'start':None, 'end':None, 'request':None, 'receive':None}, load_images=False, timeout=None, width=1024, height=768, wait=1):
+        self.url = url
+        self.headers = headers
+        self.cookies = cookies
+        self.javascript = javascript
+        self.load_images = load_images
+        self.timeout = timeout
+        self.width = width
+        self.height = height
+        self.wait = wait
 
 PROXY.worker = Proxyworker()
 
@@ -143,20 +156,25 @@ def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_red
     """
     """
     if browse is not None:
-        package = {'load_images': False, 'use_gzip': True, 'method': 'GET'}
+        package = {'load_images': browse.load_images, 'method': 'GET'}
         package['url'] = url
         package['allow_redirects'] = allow_redirects
-        package['headers'] = headers
-        package['timeout'] = int(timeout * 0.95)
+        package['headers'] = headers or browse.headers
+        package['cookies'] = cookies or browse.cookies
+        package['javascript'] = browse.javascript
+        package['width'] = browse.width
+        package['height'] = browse.height
+        package['timeout'] = browse.timeout or int(timeout * 0.95)
+        package['wait'] = browse.wait
         if cookies:
             package['headers']['Cookie'] = '; '.join(['%s=%s' % (key, val) for key, val in cookies.items()])
-        r = requests.post(browse, json.dumps(package), timeout=timeout)
+        r = requests.post(browse.url, json.dumps(package), timeout=timeout)
         content = r.content
         for one in dirtys:
             content = content.replace(one[0], one[1])
         dirtys = []
         content = unicode2utf8(json.loads(content.decode('utf-8')))
-        r = Fakeresponse(content['url'], content['status_code'], content['content'] or content['error'], r.content.decode('utf-8'), content['headers'], content['cookies'])
+        r = Fakeresponse(content['url'], content['status_code'], content['content'] or content['error'], r.content.decode('utf-8'), content['headers'], content['cookies'], js_result=content['js_result'])
     elif s is None:
         r = requests.get(url, headers=headers, cookies=cookies,
                          proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
@@ -171,19 +189,26 @@ def requPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, al
     """
     """
     if browse is not None:
-        package = {'load_images': False, 'use_gzip': True, 'method': 'GET'}
+        package = {'load_images': browse.load_images, 'method': 'POST'}
         package['url'] = url
         package['data'] = data
         package['allow_redirects'] = allow_redirects
-        package['headers'] = headers
-        package['timeout'] = int(timeout * 0.95)
-        r = requests.post(browse, json.dumps(package), timeout=timeout)
+        package['headers'] = headers or browse.headers
+        package['cookies'] = cookies or browse.cookies
+        package['javascript'] = browse.javascript
+        package['width'] = browse.width
+        package['height'] = browse.height
+        package['timeout'] = browse.timeout or int(timeout * 0.95)
+        package['wait'] = browse.wait
+        if cookies:
+            package['headers']['Cookie'] = '; '.join(['%s=%s' % (key, val) for key, val in cookies.items()])
+        r = requests.post(browse.url, json.dumps(package), timeout=timeout)
         content = r.content
         for one in dirtys:
             content = content.replace(one[0], one[1])
         dirtys = []
         content = unicode2utf8(json.loads(content.decode('utf-8')))
-        r = Fakeresponse(content['url'], content['status_code'], content['content'] or content['error'], r.content.decode('utf-8'), content['headers'], content['cookies'])
+        r = Fakeresponse(content['url'], content['status_code'], content['content'] or content['error'], r.content.decode('utf-8'), content['headers'], content['cookies'], js_result=content['js_result'])
     elif s is None:
         r = requests.post(url, data=data, headers=headers, cookies=cookies,
                           proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)

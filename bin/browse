@@ -5,7 +5,6 @@ from docopt import docopt
 
 proxy = """
 var port, server, service,
-  wait_before_end = 60000,
   system = require("system"),
   webpage = require("webpage");
 
@@ -44,7 +43,7 @@ function get_bytes(str, isGetBytes) {
 }
 
 if (system.args.length !== 2) {
-  console.log("Usage: .js <portnumber>");
+  console.log("Usage: phantom web server <portnumber>");
   phantom.exit(1);
 } else {
   port = system.args[1];
@@ -71,9 +70,10 @@ if (system.args.length !== 2) {
 
     // create and set page
     var page = webpage.create();
+    var wait = (fetch.wait || 1) * 1000;
     page.viewportSize = {
-      width: 1024,
-      height: 768
+      width: fetch.width || 1024,
+      height: fetch.height || 768
     }
     if (fetch.headers) {
       fetch.headers["Accept-Encoding"] = undefined;
@@ -86,66 +86,85 @@ if (system.args.length !== 2) {
     page.settings.encoding = "utf-8";
     page.settings.webSecurityEnabled = false;
     page.settings.localToRemoteUrlAccessEnabled = true;
-    page.settings.loadImages = fetch.load_images ? true : false;
-    page.settings.resourceTimeout = fetch.timeout ? fetch.timeout * 1000 : 120*1000;
+    page.settings.loadImages = fetch.load_images || false;
+    page.settings.resourceTimeout = (fetch.timeout || 120)*1000;
     if (fetch.headers) {
       page.customHeaders = fetch.headers;
     }
+    if (fetch.cookies) {
+      page.addCookie(fetch.cookies);
+    }
     
     // add callbacks
-    var first_response = null,
+    var first = null,
         finished = false,
         page_loaded = false,
         start_time = Date.now(),
         end_time = null,
-        script_executed = false,
-        javascript_result = null;
+        js_executed = {'start':false, 'end':false},
+        js_result = {'start':null, 'request':[], 'receive':[], 'end':null};
     page.onInitialized = function() {
-      if (!script_executed && fetch.javascript && fetch.runat === "start") {
-        script_executed = true;
-        console.log("running document-start script.");
-        javascript_result = page.evaluateJavaScript(fetch.javascript);
+      if (!js_executed.start && fetch.javascript.start) {
+        js_executed.start = true;
+        console.debug("running document-start script.");
+        // js_result.start = page.evaluateJavaScript(fetch.javascript.start);
+        var exes = fetch.javascript.start;
+        js_result.end = page.evaluate(function(exes) {
+          eval(exes);
+        });
       }
     };
     page.onLoadFinished = function(status) {
       page_loaded = true;
-      if (!script_executed && fetch.javascript && fetch.runat !== "start") {
-        script_executed = true;
+      if (!js_executed.end && fetch.javascript.end) {
+        js_executed.end = true;
         console.log("running document-end script.");
-        javascript_result = page.evaluateJavaScript(fetch.javascript);
+        // js_result.end = page.evaluateJavaScript(fetch.javascript.end);
+        var exes = fetch.javascript.end;
+        js_result.end = page.evaluate(function(exes) {
+          eval(exes);
+        });
       }
-      console.debug("waiting "+wait_before_end+"ms before finished.");
-      end_time = Date.now() + wait_before_end;
-      setTimeout(handle, wait_before_end+10, page);
+      console.debug("waiting "+wait+"ms before finished.");
+      end_time = Date.now() + wait;
+      setTimeout(handle, wait+10, page);
     };
     page.onResourceRequested = function(request) {
+      if (js_executed.request) {
+        console.debug("running document-request script.");
+        js_result.request.push(page.evaluateJavaScript(fetch.javascript.request));
+      }
       console.debug("Starting request: #"+request.id+" ["+request.method+"]"+request.url);
       end_time = null;
     };
     page.onResourceReceived = function(response) {
       console.debug("Request finished: #"+response.id+" ["+response.status+"]"+response.url);
-      if (first_response === null && response.status != 301 && response.status != 302) {
-        first_response = response;
+      if (first === null && response.status != 301 && response.status != 302) {
+        first = response;
+      }
+      if (js_executed.receive) {
+        console.debug("running document-request script.");
+        js_result.receive.push(page.evaluateJavaScript(fetch.javascript.receive));
       }
       if (page_loaded) {
-        console.debug("waiting "+wait_before_end+"ms before finished.");
-        end_time = Date.now() + wait_before_end;
-        setTimeout(handle, wait_before_end+10, page);
+        console.debug("waiting "+wait+"ms before finished.");
+        end_time = Date.now() + wait;
+        setTimeout(handle, wait+10, page);
       }
     }
     page.onResourceError=page.onResourceTimeout=function(response) {
       console.info("Request error: #"+response.id+" ["+response.errorCode+"="+response.errorString+"]"+response.url);
-      if (first_response === null) {
-        first_response = response;
+      if (first === null) {
+        first = response;
       }
       if (page_loaded) {
-        console.debug("waiting "+wait_before_end+"ms before finished.");
-        end_time = Date.now() + wait_before_end;
-        setTimeout(handle, wait_before_end+10, page);
+        console.debug("waiting "+wait+"ms before finished.");
+        end_time = Date.now() + wait;
+        setTimeout(handle, wait+10, page);
       }
     }
     setTimeout(function(page) {
-      if (first_response) {
+      if (first) {
         end_time = Date.now()-1;
         handle(page);
       }
@@ -173,19 +192,18 @@ if (system.args.length !== 2) {
         result = format(page);
       } catch (e) {
         result = {
-          orig_url: fetch.url,
+          origin: fetch.url,
           status_code: 599,
           error: e.toString(),
           content:  "",
           headers: {},
           url: page.url,
           cookies: {},
-          time: (Date.now() - start_time) / 1000,
-          save: fetch.save
+          time: (Date.now() - start_time) / 1000
         }
       }
 
-      console.log("["+result.status_code+"] "+result.orig_url+" "+result.time)
+      console.log("["+result.status_code+"] "+result.origin+" "+result.time)
 
       result['content'] = result['content'].replace(new RegExp('"', 'gm'), "'");
       var body = unescape(JSON.stringify(result, null, 2));
@@ -212,23 +230,22 @@ if (system.args.length !== 2) {
       });
 
       var headers = {};
-      if (first_response.headers) {
-        first_response.headers.forEach(function(e) {
+      if (first.headers) {
+        first.headers.forEach(function(e) {
           headers[e.name] = e.value;
         });
       }
 
       return {
-        orig_url: fetch.url,
-        status_code: first_response.status || 599,
-        error: first_response.errorString,
+        origin: fetch.url,
+        status_code: first.status || 599,
+        error: first.errorString,
         content:  page.content,
         headers: headers,
         url: page.url,
         cookies: cookies,
         time: (Date.now() - start_time) / 1000,
-        javascript_result: javascript_result,
-        save: fetch.save
+        js_result: js_result
       }
     }
   });
