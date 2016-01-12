@@ -55,6 +55,7 @@ class Fakeresponse(object):
 class Fakerequest(object):
     def __init__(self, url, headers=None, cookies=None, javascript={'start':None, 'end':None, 'request':None, 'receive':None}, load_images=False, timeout=None, width=1024, height=768, wait=1):
         self.url = url
+        self.urlhash = hash(url)
         self.headers = headers
         self.cookies = cookies
         self.javascript = javascript
@@ -158,6 +159,7 @@ def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_red
     if browse is not None:
         package = {'load_images': browse.load_images, 'method': 'GET'}
         package['url'] = url
+        package['urlhash'] = urlhash
         package['allow_redirects'] = allow_redirects
         package['headers'] = headers or browse.headers
         package['cookies'] = cookies or browse.cookies
@@ -191,6 +193,7 @@ def requPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, al
     if browse is not None:
         package = {'load_images': browse.load_images, 'method': 'POST'}
         package['url'] = url
+        package['urlhash'] = urlhash
         package['data'] = data
         package['allow_redirects'] = allow_redirects
         package['headers'] = headers or browse.headers

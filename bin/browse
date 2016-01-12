@@ -7,7 +7,7 @@ proxy = """
 var port, server, service,
   system = require("system"),
   webpage = require("webpage");
-
+var timeouts = {};
 function get_bytes(str, isGetBytes) {
    var back = [],
      byteSize = 0;
@@ -69,6 +69,8 @@ if (system.args.length !== 2) {
     console.debug(JSON.stringify(fetch, null, 2));
 
     // create and set page
+    var urlhash = fetch.urlhash;
+    timeouts[urlhash] = [];
     var page = webpage.create();
     var wait = (fetch.wait || 1) * 1000;
     page.viewportSize = {
@@ -107,11 +109,7 @@ if (system.args.length !== 2) {
       if (!js_executed.start && fetch.javascript.start) {
         js_executed.start = true;
         console.debug("running document-start script.");
-        // js_result.start = page.evaluateJavaScript(fetch.javascript.start);
-        var exes = fetch.javascript.start;
-        js_result.end = page.evaluate(function(exes) {
-          eval(exes);
-        });
+        js_result.start = page.evaluateJavaScript(fetch.javascript.start);
       }
     };
     page.onLoadFinished = function(status) {
@@ -119,15 +117,11 @@ if (system.args.length !== 2) {
       if (!js_executed.end && fetch.javascript.end) {
         js_executed.end = true;
         console.log("running document-end script.");
-        // js_result.end = page.evaluateJavaScript(fetch.javascript.end);
-        var exes = fetch.javascript.end;
-        js_result.end = page.evaluate(function(exes) {
-          eval(exes);
-        });
+        js_result.end = page.evaluateJavaScript(fetch.javascript.end);
       }
       console.debug("waiting "+wait+"ms before finished.");
       end_time = Date.now() + wait;
-      setTimeout(handle, wait+10, page);
+      timeouts[urlhash].push(setTimeout(handle, wait+10, page, '3'));
     };
     page.onResourceRequested = function(request) {
       if (js_executed.request) {
@@ -149,7 +143,7 @@ if (system.args.length !== 2) {
       if (page_loaded) {
         console.debug("waiting "+wait+"ms before finished.");
         end_time = Date.now() + wait;
-        setTimeout(handle, wait+10, page);
+        timeouts[urlhash].push(setTimeout(handle, wait+10, page, '4'));
       }
     }
     page.onResourceError=page.onResourceTimeout=function(response) {
@@ -160,15 +154,15 @@ if (system.args.length !== 2) {
       if (page_loaded) {
         console.debug("waiting "+wait+"ms before finished.");
         end_time = Date.now() + wait;
-        setTimeout(handle, wait+10, page);
+        timeouts[urlhash].push(setTimeout(handle, wait+10, page, '5'));
       }
     }
-    setTimeout(function(page) {
+    timeouts[urlhash].push(setTimeout(function(page) {
       if (first) {
         end_time = Date.now()-1;
-        handle(page);
+        handle(page, '0');
       }
-    }, page.settings.resourceTimeout, page);
+    }, page.settings.resourceTimeout, page));
 
     // send request
     page.open(fetch.url, {
@@ -178,18 +172,23 @@ if (system.args.length !== 2) {
     });
 
     // make response
-    function handle(page) {
+    function handle(page, index) {
       if (!!!end_time || finished) {
         return;
       }
       if (end_time > Date.now()) {
-        setTimeout(handle, Date.now() - end_time, page);
+        timeouts[urlhash].push(setTimeout(handle, Date.now() - end_time, page, '2'));
         return;
       }
 
+      for(timeoutid in timeouts[urlhash]){
+        clearTimeout(timeoutid);
+      }
+      delete timeouts[urlhash];
+
       var result = {};
       try {
-        result = format(page);
+        result = format(page, index);
       } catch (e) {
         result = {
           origin: fetch.url,
@@ -223,7 +222,7 @@ if (system.args.length !== 2) {
       page.close();
     }
 
-    function format(page) {
+    function format(page, index) {
       var cookies = {};
       page.cookies.forEach(function(e) {
         cookies[e.name] = e.value;
