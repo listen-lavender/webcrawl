@@ -33,11 +33,11 @@ class SpiderOrigin(Workflows):
     def prepare(self):
         pass
 
-    def fetchDatas(self, flow, *args, **kwargs):
+    def fetchDatas(self, flow, step=0, *args, **kwargs):
         try:
             self.extractFlow()
             start = time.time()
-            self.fire(flow, *args, **kwargs)
+            self.fire(flow, step=step, *args, **kwargs)
             if self.timeout > -1:
                 def check(self, timeout):
                     time.sleep(timeout)

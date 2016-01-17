@@ -94,16 +94,21 @@ def index(key):
     return wrap
 
 
-def store(db, way, update, method):
+def store(db=None, way=None, update=None, method=None):
     def wrap(fun):
-        fun.store = functools.partial(db(way), update=update, method=method)
-        fun.store.__name__ = 'store' + way.im_self.__name__
-        fun.store.retry = RETRY
-        fun.store.timelimit = TIMELIMIT
-        fun.store.priority = 0
-        fun.store.succ = 0
-        fun.store.fail = 0
-        fun.store.timeout = 0
+        if way is not None:
+            if db is None:
+                fun.store = way
+                fun.store.__name__ = way.__name__
+            else:
+                fun.store = functools.partial(db(way), update=update, method=method)
+                fun.store.__name__ = 'store' + way.im_self.__name__
+            fun.store.retry = RETRY
+            fun.store.timelimit = TIMELIMIT
+            fun.store.priority = 0
+            fun.store.succ = 0
+            fun.store.fail = 0
+            fun.store.timeout = 0
 
         @functools.wraps(fun)
         def wrapped(*args, **kwargs):
@@ -326,7 +331,9 @@ class Workflows(object):
         if worktype == 'COROUTINE':
             monkey.patch_all(Event=True)
             gid = threading._get_ident()
-            threading._active[gid] = threading._active[MTID]
+            thread = threading._active.get(MTID)
+            if thread:
+                threading._active[gid] = thread
             PriorjoinQueue = GPriorjoinQueue
         else:
             PriorjoinQueue = TPriorjoinQueue
@@ -457,7 +464,7 @@ class Workflows(object):
         else:
             for it in dir(self):
                 it = getattr(self, it)
-                if hasattr(it, 'label') and hasattr(it, 'next'):
+                if hasattr(it, 'label'):
                     self.__flows[it.label] = {'tinder': it, 'terminator': it}
             for flow in self.__flows.values():
                 flow['hasprior'] = True
@@ -494,18 +501,24 @@ class Workflows(object):
                     flow['hasprior'] = True
             print "Inner workflow is set."
 
-    def fire(self, flow, *args, **kwargs):
-        if self.__flows[flow]['tinder'] is not None:
-            self.queue.put((self.__flows[flow]['tinder'].priority, id(
-                self.__flows[flow]['tinder']), 0, args, kwargs))
-            for worker in self.workers:
-                if self.__worktype == 'COROUTINE':
-                    gevent.spawn(worker)
-                else:
-                    worker.setDaemon(True)
-                    worker.start()
+    def fire(self, flow, step=0, *args, **kwargs):
+        it = self.__flows[flow]['tinder']
+        if it is not None:
+            try:
+                for k in range(step):
+                    it = it.next
+            except:
+                print 'Flow %s has no %d steps.' % (flow, step)
+            else:
+                self.queue.put((it.priority, id(it), 0, args, kwargs))
+                for worker in self.workers:
+                    if self.__worktype == 'COROUTINE':
+                        gevent.spawn(worker)
+                    else:
+                        worker.setDaemon(True)
+                        worker.start()
         else:
-            raise 'There is no work flow.'
+            print 'There is no work flow.'
 
     def exit(self):
         self.queue.task_done(force=True)
@@ -514,7 +527,8 @@ class Workflows(object):
         self.queue.join()
 
     def __del__(self):
-        del threading._active[MTID]
+        if threading._active[MTID]:
+            del threading._active[MTID]
 
 if __name__ == '__main__':
     pass
