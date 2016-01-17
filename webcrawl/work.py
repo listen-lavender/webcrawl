@@ -218,7 +218,7 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, tim
 
 
 def handleNextStore(workqueue, retvar, method, hasnext=False, hasstore=False):
-    if not retvar:
+    if retvar is None:
         pass
     elif type(retvar) == dict:
         hasnext and workqueue.put(
