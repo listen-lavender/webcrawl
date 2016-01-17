@@ -2,7 +2,7 @@
 # coding=utf-8
 
 """
-   抓取工具的坐标处理功能
+   Coordinate handle
 """
 import math
 import base64
@@ -15,11 +15,6 @@ base10to36 = [str(x) for x in range(10)] + [chr(x)
 
 
 def dec2hex(num):
-    """
-        10进制转换成36进制
-        @param num: 10进制数字
-        @return: 36进制字符串
-    """
 
     mid = []
     while True:
@@ -34,11 +29,6 @@ base36to10 = {'1': 1, '0': 0, '3': 3, '2': 2, '5': 5, '4': 4, '7': 7, '6': 6, '9
 
 
 def hex2dec(stri):
-    """
-        36进制转换成10进制
-        @param num: 36进制字符串
-        @return: 10进制数字
-    """
     num = 0
     stri = stri[::-1]
     for k in stri:
@@ -47,11 +37,6 @@ def hex2dec(stri):
 
 
 def decodeMapbarLatLnt(latlon):
-    """
-        图吧地图的经纬度解密
-        @param num: 图吧经纬度36进制字符串
-        @return: 10进制经度，10进制纬度
-    """
     if not latlon or latlon.strip() == '':
         return [0.0, 0.0]
     latlon = latlon.strip()
@@ -81,11 +66,6 @@ abckey = [[0, 2, 1, 2, 8, 9, 4, 1, 7, 2, 5, 3, 9], [0, 3, 2, 2, 9, 5, 8, 2, 6, 8
 
 
 def decodeMapabcLatLnt(llstr):
-    """
-        图盟地图的经纬度解密
-        @param num: 图盟经纬度36进制字符串
-        @return: 10进制经度或纬度
-    """
     llstr = llstr.strip()
     keyposition = 0
     last4chr = llstr[-4:]
@@ -108,12 +88,6 @@ def decodeMapabcLatLnt(llstr):
 
 
 def convertGtoB(glat, glnt):
-    """
-        通过百度map接口，将谷歌经纬度转换成百度经纬度
-        @param glat: 谷歌纬度
-        @param glnt: 谷歌经度
-        @return blat, blnt: 百度纬，经度元组
-    """
     x_pi = 3.14159265358979324 * 3000.0 / 180.0
     x = float(glnt)
     y = float(glat)
@@ -125,12 +99,6 @@ def convertGtoB(glat, glnt):
 
 
 def convertBtoG(blat, blnt):
-    """
-        通过百度map接口，将百度经纬度转换成谷歌经纬度
-        @param glat: 百度纬度
-        @param glnt: 百度经度
-        @return blat, blnt: 谷歌纬，经度元组
-    """
     x_pi = 3.14159265358979324 * 3000.0 / 180.0
 
     x = float(blnt) - 0.0065
@@ -143,14 +111,6 @@ def convertBtoG(blat, blnt):
 
 
 def calcDistance(lat1, lon1, lat2, lon2):
-    """
-        通过计算，获取两谷歌座标之间的直线距离
-        @param lat1: 坐标纬度
-        @param lon1: 坐标经度
-        @param lat2: 坐标纬度
-        @param lon2: 坐标经度
-        @return :直线距离，单位米
-    """
     if type(lat1) == str:
         lat1 = float(lat1)
         lon1 = float(lon1)

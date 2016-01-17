@@ -34,14 +34,6 @@ class SpiderOrigin(Workflows):
         pass
 
     def fetchDatas(self, flow, *args, **kwargs):
-        """
-            抓取酒店数据
-            @param flow: 数据来源
-            @param conditions: 条件限制
-            @param terminal: 提前终结者
-            @param filepath: 提前终结输出地方
-            @return : 执行状态
-        """
         try:
             self.extractFlow()
             start = time.time()
@@ -56,10 +48,6 @@ class SpiderOrigin(Workflows):
                 watcher.setDaemon(True)
                 watcher.start()
             self.waitComplete()
-            # if hasattr(self, 'onway') and self.onway:
-            #     self.onway(None, forcexe=True)
-            # if hasattr(self, 'store') and self.store:
-            #     self.store(None, update=False, method='MANY', forcexe=True)
             it = self.tinder(flow)
             while True:
                 if hasattr(it, 'store'):
@@ -82,19 +70,9 @@ class SpiderOrigin(Workflows):
             return False
 
     def clearDataOne(self, one):
-        """
-            清洗数据
-            @param one: 待清洗的数据
-            @return one: 返回清洗后的数据
-        """
         pass
 
     def implementDataone(self, *args, **kwargs):
-        """
-             补充酒店数据
-             @param *args: 元组参数
-             @param **kwargs: 字典参数
-        """
         pass
 
     @classmethod

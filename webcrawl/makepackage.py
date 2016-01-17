@@ -118,11 +118,6 @@ def makeAssistdoc(pkgpath, pkgname, version):
 
 
 def checkVersionstr(version):
-    """
-        检查版本号是否规范
-        @param version: 版本号
-        @return : 检查状态
-    """
     if version is None:
         return False
     else:
@@ -130,11 +125,6 @@ def checkVersionstr(version):
 
 
 def pickupRely(filepath):
-    """
-        提取python文件的依赖
-        @param filepath: python文件地址
-        @return relys: 依赖列表
-    """
     relys = []
     for line in open(filepath):
         line = line.strip()
@@ -166,13 +156,6 @@ def pickupRely(filepath):
 
 
 def initDir(fdir, itemlist, isTop=False, version=None):
-    """
-        提取python文件的依赖
-        @param fdir: 目录地址
-        @param itemlist: 目录元素列表
-        @param isTop: 是否是顶层目录
-        @return version: 顶层目录文件需要的版本号
-    """
     if isTop == True:
         fi = open(os.path.join(fdir, '__init__.py'), 'w')
         assert checkVersionstr(version) == True
