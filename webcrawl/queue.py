@@ -2,11 +2,79 @@
 # coding=utf-8
 import json
 import heapq
+import redis
 import beanstalkc
+import cPickle as pickle
 from Queue import PriorityQueue
 from gevent.queue import Queue
 
 from character import unicode2utf8
+
+class RedisQueue(object):
+    conditions = {}
+
+    def __init__(self, host='localhost', port=6379, db=0, tube='default', timeout=30, items=None, unfinished_tasks=None):
+        import threading
+        self.rc = redis.Redis(host='localhost', port=port, db=db)
+        self.tube = tube
+        if self.tube in RedisQueue.conditions:
+            pass
+        else:
+            RedisQueue.conditions[self.tube] = {
+                'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event()}
+            self.clear()
+            RedisQueue.conditions[self.tube]['event'].set()
+        if items:
+            for item in items:
+                self.put(item)
+
+    def put(self, item):
+        priority, methodId, times, args, kwargs = item
+        self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
+                                'times': times, 'args': args, 'kwargs': kwargs}), priority)
+        # self.rc.put(pickle.dumps({'priority': priority, 'methodId': methodId,
+        #                         'times': times, 'args': args, 'kwargs': kwargs}), priority=priority)
+        RedisQueue.conditions[self.tube]['unfinished_tasks'] += 1
+        RedisQueue.conditions[self.tube]['event'].clear()
+
+    def get(self):
+        item = self.rc.zrangebyscore(self.tube, float('-inf'), float('+inf'), start=0, num=1)
+        if item:
+            item = item[0]
+            self.rc.zrem(self.tube, item)
+            item = pickle.loads(item)
+            return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'])
+        else:
+            return None, None, None, None, None
+
+    def empty(self):
+        if self.rc.zcard(self.tube) == 0:
+            return True
+        else:
+            return False
+
+    def copy(self):
+        pass
+
+    def task_done(self, force=False):
+        if RedisQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
+            # raise ValueError('task_done() called too many times')
+            pass
+        RedisQueue.conditions[self.tube]['unfinished_tasks'] -= 1
+        if RedisQueue.conditions[self.tube]['unfinished_tasks'] == 0 or force:
+            # if self.empty() or force:
+            RedisQueue.conditions[self.tube]['event'].set()
+
+    def join(self):
+        RedisQueue.conditions[self.tube]['event'].wait()
+
+    def clear(self):
+        while not self.empty():
+            item = self.get()
+            del item
+
+    def __repr__(self):
+        return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
 
 
 class BeanstalkdQueue(object):
@@ -31,7 +99,7 @@ class BeanstalkdQueue(object):
 
     def put(self, item):
         priority, methodId, times, args, kwargs = item
-        self.bc.put(json.dumps({'priority': priority, 'methodId': methodId,
+        self.bc.put(pickle.dumps({'priority': priority, 'methodId': methodId,
                                 'times': times, 'args': args, 'kwargs': kwargs}), priority=priority)
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] += 1
         BeanstalkdQueue.conditions[self.tube]['event'].clear()
@@ -39,7 +107,7 @@ class BeanstalkdQueue(object):
     def get(self):
         item = self.bc.reserve()
         item.delete()
-        item = unicode2utf8(json.loads(item.body))
+        item = pickle.loads(item.body)
         return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'])
 
     def empty(self):
@@ -177,7 +245,6 @@ if __name__ == '__main__':
 
     def produce():
         for item in range(20):
-            # print 'kkkkkk', 20 - item, item
             q.put((20 - item, item))
             gevent.sleep(0.1)
 
@@ -190,4 +257,4 @@ if __name__ == '__main__':
     # b.start()
 
     q.join()
-    print 'kkkkkk'
+

@@ -16,7 +16,7 @@ from Queue import Queue
 from gevent import monkey, Timeout
 
 
-from queue import BeanstalkdQueue, GPriorjoinQueue, TPriorjoinQueue
+from queue import RedisQueue, BeanstalkdQueue, GPriorjoinQueue, TPriorjoinQueue
 from exception import TimeoutError
 
 
@@ -262,6 +262,8 @@ def geventwork(workqueue):
         else:
             timer = Nevertimeout()
             priority, methodId, times, args, kwargs = workqueue.get()
+            if methodId is None:
+                continue
             method = ctypes.cast(methodId, ctypes.py_object).value
             try:
                 if method.timelimit > 0:
@@ -346,8 +348,10 @@ class Workflows(object):
         try:
             if self.__queuetype == 'P':
                 self.queue = PriorjoinQueue()
-            else:
+            elif self.__queuetype == 'B':
                 self.queue = BeanstalkdQueue(tube=str(id(self)))
+            else:
+                self.queue = RedisQueue(tube=str(id(self)))
         except:
             print 'Wrong type of queue, please choose P or B or start your beanstalkd service.'
         self.workers = []
@@ -358,17 +362,22 @@ class Workflows(object):
             for k in range(worknum):
                 if self.__queuetype == 'P':
                     worker = functools.partial(geventwork, self.queue)
-                else:
+                elif self.__queuetype == 'B':
                     worker = functools.partial(
                         geventwork, BeanstalkdQueue(tube=str(id(self))))
+                else:
+                    worker = functools.partial(
+                        geventwork, RedisQueue(tube=str(id(self))))
                 self.workers.append(worker)
         else:
             from time import sleep
             for k in range(worknum):
                 if self.__queuetype == 'P':
                     worker = Foreverworker(self.queue)
-                else:
+                elif self.__queuetype == 'B':
                     worker = Foreverworker(BeanstalkdQueue(tube=str(id(self))))
+                else:
+                    worker = Foreverworker(RedisQueue(tube=str(id(self))))
                 self.workers.append(worker)
 
     def tinder(self, flow):
