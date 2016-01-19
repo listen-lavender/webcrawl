@@ -149,9 +149,19 @@ class GPriorjoinQueue(Queue):
     def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
         from gevent.event import Event
         Queue.__init__(self, maxsize, items)
-        self.unfinished_tasks = unfinished_tasks or 0
         self._cond = Event()
         self._cond.set()
+        
+        if unfinished_tasks:
+            self.unfinished_tasks = unfinished_tasks
+        elif items:
+            self.unfinished_tasks = len(items)
+        else:
+            self.unfinished_tasks = 0
+
+        if self.unfinished_tasks:
+            self._cond.clear()
+        
 
     def _init(self, maxsize, items=None):
         if items:
