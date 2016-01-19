@@ -4,7 +4,6 @@ import json
 import heapq
 import redis
 import beanstalkc
-import threading
 import cPickle as pickle
 from Queue import PriorityQueue
 from gevent.queue import Queue
@@ -192,16 +191,22 @@ class GPriorjoinQueue(Queue):
 
 class TPriorjoinQueue(PriorityQueue):
 
-    def _init(self, maxsize=None, items=None, unfinished_tasks=None):
+    def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
+        import threading
         self.maxsize = maxsize or 0
         if items:
             self.queue = list(items)
         else:
             self.queue = []
-        from threading import Event
+        self._init(maxsize)
+        self.mutex = threading.Lock()
+        self.not_empty = threading.Condition(self.mutex)
+        self.not_full = threading.Condition(self.mutex)
+        self.all_tasks_done = threading.Condition(self.mutex)
         self.unfinished_tasks = unfinished_tasks or 0
-        self._cond = Event()
-        self._cond.set()
+
+    def _init(self, maxsize):
+        pass
 
     def copy(self):
         return type(self)(self.maxsize, self.queue, self.unfinished_tasks)
@@ -213,24 +218,11 @@ class TPriorjoinQueue(PriorityQueue):
                 self.unfinished_tasks, self.all_tasks_done)
         return result
 
-    def put(self, item, heappush=heapq.heappush):
+    def _put(self, item, heappush=heapq.heappush):
         heappush(self.queue, item)
-        # Queue._put(self, item)
-        self.unfinished_tasks += 1
-        self._cond.clear()
 
-    def get(self, heappop=heapq.heappop):
+    def _get(self, heappop=heapq.heappop):
         return heappop(self.queue)
-
-    def task_done(self, force=False):
-        if self.unfinished_tasks <= 0:
-            raise ValueError('task_done() called too many times')
-        self.unfinished_tasks -= 1
-        if self.unfinished_tasks == 0 or force:
-            self._cond.set()
-
-    def join(self):
-        self._cond.wait()
 
 if __name__ == '__main__':
     from gevent.queue import JoinableQueue
