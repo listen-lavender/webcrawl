@@ -4,6 +4,7 @@ import json
 import heapq
 import redis
 import beanstalkc
+import threading
 import cPickle as pickle
 from Queue import PriorityQueue
 from gevent.queue import Queue
@@ -17,6 +18,11 @@ class RedisQueue(object):
         import threading
         self.rc = redis.Redis(host='localhost', port=port, db=db)
         self.tube = tube
+        self.mutex = threading.Lock()
+        self.not_empty = threading.Condition(self.mutex)
+        self.not_full = threading.Condition(self.mutex)
+        self.all_tasks_done = threading.Condition(self.mutex)
+        self.unfinished_tasks = 0
         if self.tube in RedisQueue.conditions:
             pass
         else:
