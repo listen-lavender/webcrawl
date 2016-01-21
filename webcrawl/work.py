@@ -15,7 +15,7 @@ MTID = threading._get_ident()  # id of main thread
 from gevent import monkey, Timeout
 
 
-from pjq import RedisQueue, BeanstalkdQueue, PriorjoinQueue
+from pjq import RedisQueue, BeanstalkdQueue, LocalQueue
 from exception import TimeoutError
 
 
@@ -347,7 +347,7 @@ class Workflows(object):
     def prepare(self, flow):
         try:
             if self.__queuetype == 'P':
-                self.queue = PriorjoinQueue()()
+                self.queue = LocalQueue()()
             elif self.__queuetype == 'B':
                 self.queue = BeanstalkdQueue(tube=str(id(self)))
             else:

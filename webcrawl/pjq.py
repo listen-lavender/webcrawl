@@ -139,11 +139,11 @@ class BeanstalkdQueue(object):
 
 
 
-# class PriorjoinQueue(threading.queue.Queue):
+# class LocalQueue(threading.queue.Queue):
 
 #     def __new__(cls):
 #         return threading.queue.Queue.__new__(cls)
-def PriorjoinQueue():
+def LocalQueue():
 
     def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
         self.is_patch = not 'join' in dir(threading.queue.Queue)
@@ -218,7 +218,7 @@ def PriorjoinQueue():
 if __name__ == '__main__':
     from gevent.queue import JoinableQueue
     import gevent
-    q = PriorjoinQueue()
+    q = LocalQueue()
 
     def worker():
         while True:
