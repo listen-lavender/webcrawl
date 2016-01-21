@@ -27,11 +27,7 @@ class SpiderOrigin(Workflows):
         # Workflows.__init__(self, worknum=worknum, queuetype=queuetype, worktype=worktype)
         # Keeper.__init__(self)
         self.timeout = timeout
-        self.prepare()
         self.dones = set()
-
-    def prepare(self):
-        pass
 
     def fetchDatas(self, flow, step=0, *args, **kwargs):
         try:

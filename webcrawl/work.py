@@ -16,7 +16,7 @@ from Queue import Queue
 from gevent import monkey, Timeout
 
 
-from queue import RedisQueue, BeanstalkdQueue, GPriorjoinQueue, TPriorjoinQueue
+from pjq import RedisQueue, BeanstalkdQueue, PriorjoinQueue
 from exception import TimeoutError
 
 
@@ -261,9 +261,10 @@ def geventwork(workqueue):
             sleep(0.1)
         else:
             timer = Nevertimeout()
-            priority, methodId, times, args, kwargs = workqueue.get()
-            if methodId is None:
+            item = workqueue.get(timeout=10)
+            if item is None:
                 continue
+            priority, methodId, times, args, kwargs = item
             method = ctypes.cast(methodId, ctypes.py_object).value
             try:
                 if method.timelimit > 0:
@@ -336,30 +337,30 @@ class Workflows(object):
             thread = threading._active.get(MTID)
             if thread:
                 threading._active[gid] = thread
-            PriorjoinQueue = GPriorjoinQueue
-        else:
-            PriorjoinQueue = TPriorjoinQueue
         self.__flowcount = {'inner': set(), 'outer': set()}
         self.__worknum = worknum
         self.__queuetype = queuetype
         self.__worktype = worktype
+        self.__flows = {}
         if not hasattr(self, 'clsname'):
             self.clsname = str(self.__class__).split(".")[-1].replace("'>", "")
+        
+    def prepare(self, flow):
         try:
             if self.__queuetype == 'P':
-                self.queue = PriorjoinQueue()
+                self.queue = PriorjoinQueue()()
             elif self.__queuetype == 'B':
                 self.queue = BeanstalkdQueue(tube=str(id(self)))
             else:
-                self.queue = RedisQueue(tube=str(id(self)))
+                self.queue = RedisQueue(tube=str(id(self)), weight=self.__flows[flow]['weight'][::-1])
         except:
             print 'Wrong type of queue, please choose P or B or start your beanstalkd service.'
         self.workers = []
-        self.__flows = {}
+
         global sleep
         if self.__worktype == 'COROUTINE':
             from gevent import sleep
-            for k in range(worknum):
+            for k in range(self.__worknum):
                 if self.__queuetype == 'P':
                     worker = functools.partial(geventwork, self.queue)
                 elif self.__queuetype == 'B':
@@ -367,17 +368,18 @@ class Workflows(object):
                         geventwork, BeanstalkdQueue(tube=str(id(self))))
                 else:
                     worker = functools.partial(
-                        geventwork, RedisQueue(tube=str(id(self))))
+                        geventwork, RedisQueue(tube=str(id(self)), weight=self.__flows[flow]['weight'][::-1]))
                 self.workers.append(worker)
         else:
             from time import sleep
-            for k in range(worknum):
-                if self.__queuetype == 'P':
-                    worker = Foreverworker(self.queue)
-                elif self.__queuetype == 'B':
-                    worker = Foreverworker(BeanstalkdQueue(tube=str(id(self))))
-                else:
-                    worker = Foreverworker(RedisQueue(tube=str(id(self))))
+            for k in range(self.__worknum):
+                worker = Foreverworker(self.queue)
+                # if self.__queuetype == 'P':
+                #     worker = Foreverworker(self.queue)
+                # elif self.__queuetype == 'B':
+                #     worker = Foreverworker(BeanstalkdQueue(tube=str(id(self))))
+                # else:
+                #     worker = Foreverworker(RedisQueue(tube=str(id(self)), weight=self.__flows[flow]['weight'][::-1]))
                 self.workers.append(worker)
 
     def tinder(self, flow):
@@ -386,7 +388,7 @@ class Workflows(object):
     def terminator(self, flow):
         return self.__flows[flow]['terminator']
 
-    def addFollow(self, flow, currmethod, nextmethod):
+    def __addFollow(self, flow, currmethod, nextmethod):
         flag = False
         if self.__flows[flow]['tinder'] is None:
             self.__flows[flow]['tinder'] = currmethod
@@ -433,7 +435,7 @@ class Workflows(object):
         else:
             raise "Not find the flow."
 
-    def deleteFollow(self, flow, currmethod):
+    def __deleteFollow(self, flow, currmethod):
         flag = False
         it = self.__flows[flow]['tinder']
         if it == currmethod:
@@ -474,8 +476,8 @@ class Workflows(object):
             for it in dir(self):
                 it = getattr(self, it)
                 if hasattr(it, 'label'):
-                    self.__flows[it.label] = {'tinder': it, 'terminator': it}
-            for flow in self.__flows.values():
+                    self.__flows[it.label] = {'tinder': it, 'terminator': it, 'weight':[]}
+            for label, flow in self.__flows.items():
                 flow['hasprior'] = True
                 flow['steps'] = 1
                 p = flow['tinder']
@@ -483,6 +485,7 @@ class Workflows(object):
                 imitate(p, b)
                 flow['hasprior'] = flow['hasprior'] and (
                     b.priority is not None)
+                self.__flows[label]['weight'].append(b.priority)
                 flow['tinder'] = b
                 self.__flowcount['inner'].add(p.label)
                 while hasattr(p, 'next') and hasattr(p.next, 'args') and hasattr(p.next, 'kwargs'):
@@ -497,22 +500,29 @@ class Workflows(object):
                     imitate(p, b)
                     flow['hasprior'] = flow['hasprior'] and (
                         b.priority is not None)
+                    self.__flows[label]['weight'].append(b.priority)
                     flow['terminator'] = b
-            for flow in self.__flows.values():
+            for label, flow in self.__flows.items():
                 if not flow['hasprior']:
+                    self.__flows[label]['weight'] = []
                     it = flow['tinder']
                     num = 0
                     it.priority = flow['steps'] - num
+                    self.__flows[label]['weight'].append(it.priority)
                     while hasattr(it, 'next'):
                         it = it.next
                         num = num + 1
                         it.priority = flow['steps'] - num
+                        self.__flows[label]['weight'].append(it.priority)
                     flow['hasprior'] = True
+                self.__flows[label]['weight'].append(0)
+                self.__flows[label]['weight'].sort()
             print "Inner workflow is set."
 
     def fire(self, flow, step=0, *args, **kwargs):
-        it = self.__flows[flow]['tinder']
+        it = self.__flows.get(flow, {'tinder':None})['tinder']
         if it is not None:
+            self.prepare(flow)
             try:
                 for k in range(step):
                     it = it.next

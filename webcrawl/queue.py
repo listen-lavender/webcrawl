@@ -1,232 +1,226 @@
-#!/usr/bin/python
-# coding=utf-8
-import json
+"""A multi-producer, multi-consumer queue."""
+
+from time import time as _time
+try:
+    import threading as _threading
+except ImportError:
+    import dummy_threading as _threading
+from collections import deque
 import heapq
-import redis
-import beanstalkc
-import cPickle as pickle
-from Queue import PriorityQueue
-from gevent.queue import Queue
 
-from character import unicode2utf8
+__all__ = ['Empty', 'Full', 'Queue', 'PriorityQueue', 'LifoQueue']
 
-class RedisQueue(object):
-    conditions = {}
+class Empty(Exception):
+    "Exception raised by Queue.get(block=0)/get_nowait()."
+    pass
 
-    def __init__(self, host='localhost', port=6379, db=0, tube='default', timeout=30, items=None, unfinished_tasks=None):
-        import threading
-        self.rc = redis.Redis(host='localhost', port=port, db=db)
-        self.tube = tube
-        self.mutex = threading.Lock()
-        self.not_empty = threading.Condition(self.mutex)
-        self.not_full = threading.Condition(self.mutex)
-        self.all_tasks_done = threading.Condition(self.mutex)
-        self.unfinished_tasks = 0
-        if self.tube in RedisQueue.conditions:
-            pass
-        else:
-            RedisQueue.conditions[self.tube] = {
-                'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event()}
-            self.clear()
-            RedisQueue.conditions[self.tube]['event'].set()
-        if items:
-            for item in items:
-                self.put(item)
+class Full(Exception):
+    "Exception raised by Queue.put(block=0)/put_nowait()."
+    pass
 
-    def put(self, item):
-        priority, methodId, times, args, kwargs = item
-        self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
-                                'times': times, 'args': args, 'kwargs': kwargs}), priority)
-        # self.rc.put(pickle.dumps({'priority': priority, 'methodId': methodId,
-        #                         'times': times, 'args': args, 'kwargs': kwargs}), priority=priority)
-        RedisQueue.conditions[self.tube]['unfinished_tasks'] += 1
-        RedisQueue.conditions[self.tube]['event'].clear()
+class Queue(object):
+    """Create a queue object with a given maximum size.
 
-    def get(self):
-        item = self.rc.zrangebyscore(self.tube, float('-inf'), float('+inf'), start=0, num=1)
-        if item:
-            item = item[0]
-            self.rc.zrem(self.tube, item)
-            item = pickle.loads(item)
-            return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'])
-        else:
-            return None, None, None, None, None
-
-    def empty(self):
-        if self.rc.zcard(self.tube) == 0:
-            return True
-        else:
-            return False
-
-    def copy(self):
-        pass
-
-    def task_done(self, force=False):
-        if RedisQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
-            # raise ValueError('task_done() called too many times')
-            pass
-        RedisQueue.conditions[self.tube]['unfinished_tasks'] -= 1
-        if RedisQueue.conditions[self.tube]['unfinished_tasks'] == 0 or force:
-            # if self.empty() or force:
-            RedisQueue.conditions[self.tube]['event'].set()
-
-    def join(self):
-        RedisQueue.conditions[self.tube]['event'].wait()
-
-    def clear(self):
-        while not self.empty():
-            item = self.get()
-            del item
-
-    def __repr__(self):
-        return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
-
-
-class BeanstalkdQueue(object):
-    conditions = {}
-
-    def __init__(self, host='localhost', port=11300, tube='default', timeout=30, items=None, unfinished_tasks=None):
-        import threading
-        self.bc = beanstalkc.Connection(host, port, connect_timeout=timeout)
-        self.tube = tube
-        self.bc.use(self.tube)
-        self.bc.watch(self.tube)
-        if self.tube in BeanstalkdQueue.conditions:
-            pass
-        else:
-            BeanstalkdQueue.conditions[self.tube] = {
-                'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event()}
-            self.clear()
-            BeanstalkdQueue.conditions[self.tube]['event'].set()
-        if items:
-            for item in items:
-                self.put(item)
-
-    def put(self, item):
-        priority, methodId, times, args, kwargs = item
-        self.bc.put(pickle.dumps({'priority': priority, 'methodId': methodId,
-                                'times': times, 'args': args, 'kwargs': kwargs}), priority=priority)
-        BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] += 1
-        BeanstalkdQueue.conditions[self.tube]['event'].clear()
-
-    def get(self):
-        item = self.bc.reserve()
-        item.delete()
-        item = pickle.loads(item.body)
-        return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'])
-
-    def empty(self):
-        if self.bc.stats_tube(self.tube)['current-jobs-ready'] == 0:
-            return True
-        else:
-            return False
-
-    def copy(self):
-        pass
-
-    def task_done(self, force=False):
-        if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
-            raise ValueError('task_done() called too many times')
-        BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] -= 1
-        if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] == 0 or force:
-            # if self.empty() or force:
-            BeanstalkdQueue.conditions[self.tube]['event'].set()
-
-    def join(self):
-        BeanstalkdQueue.conditions[self.tube]['event'].wait()
-
-    def clear(self):
-        while not self.empty():
-            item = self.get()
-            del item
-
-    def __repr__(self):
-        return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
-
-
-class GPriorjoinQueue(Queue):
-
-    def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
-        from gevent.event import Event
-        Queue.__init__(self, maxsize, items)
-        self._cond = Event()
-        self._cond.set()
-        
-        if unfinished_tasks:
-            self.unfinished_tasks = unfinished_tasks
-        elif items:
-            self.unfinished_tasks = len(items)
-        else:
-            self.unfinished_tasks = 0
-
-        if self.unfinished_tasks:
-            self._cond.clear()
-        
-
-    def _init(self, maxsize, items=None):
-        if items:
-            self.queue = list(items)
-        else:
-            self.queue = []
-
-    def copy(self):
-        return type(self)(self.maxsize, self.queue, self.unfinished_tasks)
-
-    def _format(self):
-        result = Queue._format(self)
-        if self.unfinished_tasks:
-            result += ' tasks=%s _cond=%s' % (
-                self.unfinished_tasks, self._cond)
-        return result
-
-    def _put(self, item, heappush=heapq.heappush):
-        heappush(self.queue, item)
-        # Queue._put(self, item)
-        self.unfinished_tasks += 1
-        self._cond.clear()
-
-    def _get(self, heappop=heapq.heappop):
-        return heappop(self.queue)
-
-    def task_done(self, force=False):
-        if self.unfinished_tasks <= 0:
-            raise ValueError('task_done() called too many times')
-        self.unfinished_tasks -= 1
-        if self.unfinished_tasks == 0 or force:
-            self._cond.set()
-
-    def join(self):
-        self._cond.wait()
-
-
-class TPriorjoinQueue(PriorityQueue):
-
-    def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
-        import threading
-        self.maxsize = maxsize or 0
-        if items:
-            self.queue = list(items)
-        else:
-            self.queue = []
+    If maxsize is <= 0, the queue size is infinite.
+    """
+    def __init__(self, maxsize=0):
+        self.maxsize = maxsize
         self._init(maxsize)
-        self.mutex = threading.Lock()
-        self.not_empty = threading.Condition(self.mutex)
-        self.not_full = threading.Condition(self.mutex)
-        self.all_tasks_done = threading.Condition(self.mutex)
-        self.unfinished_tasks = unfinished_tasks or 0
+        # mutex must be held whenever the queue is mutating.  All methods
+        # that acquire mutex must release it before returning.  mutex
+        # is shared between the three conditions, so acquiring and
+        # releasing the conditions also acquires and releases mutex.
+        self.mutex = _threading.Lock()
+        # Notify not_empty whenever an item is added to the queue; a
+        # thread waiting to get is notified then.
+        self.not_empty = _threading.Condition(self.mutex)
+        # Notify not_full whenever an item is removed from the queue;
+        # a thread waiting to put is notified then.
+        self.not_full = _threading.Condition(self.mutex)
+        # Notify all_tasks_done whenever the number of unfinished tasks
+        # drops to zero; thread waiting to join() is notified to resume
+        self.all_tasks_done = _threading.Condition(self.mutex)
+        self.unfinished_tasks = 0
+
+    def task_done(self):
+        print '==========='
+        """Indicate that a formerly enqueued task is complete.
+
+        Used by Queue consumer threads.  For each get() used to fetch a task,
+        a subsequent call to task_done() tells the queue that the processing
+        on the task is complete.
+
+        If a join() is currently blocking, it will resume when all items
+        have been processed (meaning that a task_done() call was received
+        for every item that had been put() into the queue).
+
+        Raises a ValueError if called more times than there were items
+        placed in the queue.
+        """
+        self.all_tasks_done.acquire()
+        try:
+            unfinished = self.unfinished_tasks - 1
+            if unfinished <= 0:
+                if unfinished < 0:
+                    raise ValueError('task_done() called too many times')
+                self.all_tasks_done.notify_all()
+            self.unfinished_tasks = unfinished
+        finally:
+            self.all_tasks_done.release()
+
+    def join(self):
+        """Blocks until all items in the Queue have been gotten and processed.
+
+        The count of unfinished tasks goes up whenever an item is added to the
+        queue. The count goes down whenever a consumer thread calls task_done()
+        to indicate the item was retrieved and all work on it is complete.
+
+        When the count of unfinished tasks drops to zero, join() unblocks.
+        """
+        self.all_tasks_done.acquire()
+        try:
+            while self.unfinished_tasks:
+                self.all_tasks_done.wait()
+        finally:
+            self.all_tasks_done.release()
+
+    def qsize(self):
+        """Return the approximate size of the queue (not reliable!)."""
+        self.mutex.acquire()
+        n = self._qsize()
+        self.mutex.release()
+        return n
+
+    def empty(self):
+        """Return True if the queue is empty, False otherwise (not reliable!)."""
+        self.mutex.acquire()
+        n = not self._qsize()
+        self.mutex.release()
+        return n
+
+    def full(self):
+        """Return True if the queue is full, False otherwise (not reliable!)."""
+        self.mutex.acquire()
+        n = 0 < self.maxsize == self._qsize()
+        self.mutex.release()
+        return n
+
+    def put(self, item, block=True, timeout=None):
+        """Put an item into the queue.
+
+        If optional args 'block' is true and 'timeout' is None (the default),
+        block if necessary until a free slot is available. If 'timeout' is
+        a non-negative number, it blocks at most 'timeout' seconds and raises
+        the Full exception if no free slot was available within that time.
+        Otherwise ('block' is false), put an item on the queue if a free slot
+        is immediately available, else raise the Full exception ('timeout'
+        is ignored in that case).
+        """
+        self.not_full.acquire()
+        try:
+            if self.maxsize > 0:
+                if not block:
+                    if self._qsize() == self.maxsize:
+                        raise Full
+                elif timeout is None:
+                    while self._qsize() == self.maxsize:
+                        self.not_full.wait()
+                elif timeout < 0:
+                    raise ValueError("'timeout' must be a non-negative number")
+                else:
+                    endtime = _time() + timeout
+                    while self._qsize() == self.maxsize:
+                        remaining = endtime - _time()
+                        if remaining <= 0.0:
+                            raise Full
+                        self.not_full.wait(remaining)
+            self._put(item)
+            self.unfinished_tasks += 1
+            self.not_empty.notify()
+        finally:
+            self.not_full.release()
+
+    def put_nowait(self, item):
+        """Put an item into the queue without blocking.
+
+        Only enqueue the item if a free slot is immediately available.
+        Otherwise raise the Full exception.
+        """
+        return self.put(item, False)
+
+    def get(self, block=True, timeout=None):
+        """Remove and return an item from the queue.
+
+        If optional args 'block' is true and 'timeout' is None (the default),
+        block if necessary until an item is available. If 'timeout' is
+        a non-negative number, it blocks at most 'timeout' seconds and raises
+        the Empty exception if no item was available within that time.
+        Otherwise ('block' is false), return an item if one is immediately
+        available, else raise the Empty exception ('timeout' is ignored
+        in that case).
+        """
+        self.not_empty.acquire()
+        try:
+            if not block:
+                if not self._qsize():
+                    raise Empty
+            elif timeout is None:
+                while not self._qsize():
+                    self.not_empty.wait()
+            elif timeout < 0:
+                raise ValueError("'timeout' must be a non-negative number")
+            else:
+                endtime = _time() + timeout
+                while not self._qsize():
+                    remaining = endtime - _time()
+                    if remaining <= 0.0:
+                        raise Empty
+                    self.not_empty.wait(remaining)
+            item = self._get()
+            self.not_full.notify()
+            return item
+        finally:
+            self.not_empty.release()
+
+    def get_nowait(self):
+        """Remove and return an item from the queue without blocking.
+
+        Only get an item if one is immediately available. Otherwise
+        raise the Empty exception.
+        """
+        return self.get(False)
+
+    # Override these methods to implement other queue organizations
+    # (e.g. stack or priority queue).
+    # These will only be called with appropriate locks held
+
+    # Initialize the queue representation
+    def _init(self, maxsize):
+        self.queue = deque()
+
+    def _qsize(self, len=len):
+        return len(self.queue)
+
+    # Put a new item in the queue
+    def _put(self, item):
+        self.queue.append(item)
+
+    # Get an item from the queue
+    def _get(self):
+        return self.queue.popleft()
+
+
+class PriorityQueue(Queue):
+    '''Variant of Queue that retrieves open entries in priority order (lowest first).
+
+    Entries are typically tuples of the form:  (priority number, data).
+    '''
 
     def _init(self, maxsize):
-        pass
+        self.queue = []
 
-    def copy(self):
-        return type(self)(self.maxsize, self.queue, self.unfinished_tasks)
-
-    def _format(self):
-        result = Queue._format(self)
-        if self.unfinished_tasks:
-            result += ' tasks=%s _cond=%s' % (
-                self.unfinished_tasks, self.all_tasks_done)
-        return result
+    def _qsize(self, len=len):
+        return len(self.queue)
 
     def _put(self, item, heappush=heapq.heappush):
         heappush(self.queue, item)
@@ -234,35 +228,18 @@ class TPriorjoinQueue(PriorityQueue):
     def _get(self, heappop=heapq.heappop):
         return heappop(self.queue)
 
-if __name__ == '__main__':
-    from gevent.queue import JoinableQueue
-    import gevent
-    q = PriorjoinQueue()
 
-    def worker():
-        while True:
-            item = q.get()
-            try:
-                gevent.sleep(5)
-            finally:
-                q.task_done()
+class LifoQueue(Queue):
+    '''Variant of Queue that retrieves most recently added entries first.'''
 
-    def consume():
-        for i in range(10):
-            gevent.spawn(worker)
+    def _init(self, maxsize):
+        self.queue = []
 
-    def produce():
-        for item in range(20):
-            q.put((20 - item, item))
-            gevent.sleep(0.1)
+    def _qsize(self, len=len):
+        return len(self.queue)
 
-    import threading
-    consume()
-    produce()
-    # a = threading.Thread(target=consume)
-    # b = threading.Thread(target=produce)
-    # a.start()
-    # b.start()
+    def _put(self, item):
+        self.queue.append(item)
 
-    q.join()
-
+    def _get(self):
+        return self.queue.pop()
