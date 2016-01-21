@@ -12,7 +12,6 @@ import gevent
 import functools
 import ctypes
 MTID = threading._get_ident()  # id of main thread
-from Queue import Queue
 from gevent import monkey, Timeout
 
 
@@ -373,13 +372,12 @@ class Workflows(object):
         else:
             from time import sleep
             for k in range(self.__worknum):
-                worker = Foreverworker(self.queue)
-                # if self.__queuetype == 'P':
-                #     worker = Foreverworker(self.queue)
-                # elif self.__queuetype == 'B':
-                #     worker = Foreverworker(BeanstalkdQueue(tube=str(id(self))))
-                # else:
-                #     worker = Foreverworker(RedisQueue(tube=str(id(self)), weight=self.__flows[flow]['weight'][::-1]))
+                if self.__queuetype == 'P':
+                    worker = Foreverworker(self.queue)
+                elif self.__queuetype == 'B':
+                    worker = Foreverworker(BeanstalkdQueue(tube=str(id(self))))
+                else:
+                    worker = Foreverworker(RedisQueue(tube=str(id(self)), weight=self.__flows[flow]['weight'][::-1]))
                 self.workers.append(worker)
 
     def tinder(self, flow):

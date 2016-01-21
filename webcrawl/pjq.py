@@ -8,8 +8,6 @@ import threading
 import queue
 threading.queue = queue
 import cPickle as pickle
-from Queue import PriorityQueue
-from gevent.queue import Queue
 
 from character import unicode2utf8
 
@@ -88,7 +86,6 @@ class BeanstalkdQueue(object):
         self.tube = tube
         self.bc.use(self.tube)
         self.bc.watch(self.tube)
-        print self.tube, 'beanstalkc'
         if self.tube in BeanstalkdQueue.conditions:
             pass
         else:
