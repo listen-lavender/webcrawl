@@ -383,6 +383,15 @@ class Workflows(object):
     def tinder(self, flow):
         return self.__flows[flow]['tinder']
 
+    def section(self, flow, step=0):
+        if step == 0:
+            return self.tinder(flow)
+        else:
+            it = self.__flows.get(flow, {'tinder':None})['tinder']
+            for k in range(step):
+                it = it.next
+            return it
+
     def terminator(self, flow):
         return self.__flows[flow]['terminator']
 
