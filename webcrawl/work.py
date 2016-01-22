@@ -322,6 +322,9 @@ class Foreverworker(threading.Thread):
         """
         geventwork(self.__workqueue)
 
+    def __del__(self):
+        del self.__workqueue
+
 
 class Workflows(object):
 
@@ -336,25 +339,35 @@ class Workflows(object):
             thread = threading._active.get(MTID)
             if thread:
                 threading._active[gid] = thread
-        self.__flowcount = {'inner': set(), 'outer': set()}
         self.__worknum = worknum
         self.__queuetype = queuetype
         self.__worktype = worktype
+        self.__flowcount = {'inner': set(), 'outer': set()}
         self.__flows = {}
         if not hasattr(self, 'clsname'):
             self.clsname = str(self.__class__).split(".")[-1].replace("'>", "")
+
+        self.queue = None
+        self.workers = []
         
-    def prepare(self, flow):
+    def prepare(self, flow=None):
+        self.workers = []
+        weight = []
+        if flow:
+            weight = self.__flows[flow]['weight'][::-1]
+            tube = str(id(self))
+        else:
+            tube = 'phoclus'
+
         try:
             if self.__queuetype == 'P':
                 self.queue = LocalQueue()()
             elif self.__queuetype == 'B':
-                self.queue = BeanstalkdQueue(tube=str(id(self)))
+                self.queue = BeanstalkdQueue(tube=tube)
             else:
-                self.queue = RedisQueue(tube=str(id(self)), weight=self.__flows[flow]['weight'][::-1])
+                self.queue = RedisQueue(tube=tube, weight=self.__flows[flow]['weight'][::-1])
         except:
             print 'Wrong type of queue, please choose P or B or start your beanstalkd service.'
-        self.workers = []
 
         global sleep
         if self.__worktype == 'COROUTINE':
@@ -364,10 +377,10 @@ class Workflows(object):
                     worker = functools.partial(geventwork, self.queue)
                 elif self.__queuetype == 'B':
                     worker = functools.partial(
-                        geventwork, BeanstalkdQueue(tube=str(id(self))))
+                        geventwork, BeanstalkdQueue(tube=tube))
                 else:
                     worker = functools.partial(
-                        geventwork, RedisQueue(tube=str(id(self)), weight=self.__flows[flow]['weight'][::-1]))
+                        geventwork, RedisQueue(tube=tube, weight=weight))
                 self.workers.append(worker)
         else:
             from time import sleep
@@ -375,9 +388,9 @@ class Workflows(object):
                 if self.__queuetype == 'P':
                     worker = Foreverworker(self.queue)
                 elif self.__queuetype == 'B':
-                    worker = Foreverworker(BeanstalkdQueue(tube=str(id(self))))
+                    worker = Foreverworker(BeanstalkdQueue(tube=tube))
                 else:
-                    worker = Foreverworker(RedisQueue(tube=str(id(self)), weight=self.__flows[flow]['weight'][::-1]))
+                    worker = Foreverworker(RedisQueue(tube=tube, weight=weight))
                 self.workers.append(worker)
 
     def tinder(self, flow):
@@ -483,7 +496,27 @@ class Workflows(object):
     def waitComplete(self):
         self.queue.join()
 
+    def weight(self, flow):
+        return self.__flows[flow]['weight']
+
+    def start(self):
+        self.prepare()
+        for worker in self.workers:
+            if self.__worktype == 'COROUTINE':
+                gevent.spawn(worker)
+            else:
+                worker.setDaemon(True)
+                worker.start()
+
+    def task(self, weight, section, *args, **kwargs):
+        self.queue.rank(weight)
+        self.queue.put((section.priority, id(section), 0, args, kwargs))
+
     def __del__(self):
+        if self.queue is not None:
+            self.queue.collect()
+        del self.queue
+        del self.workers
         if threading._active[MTID]:
             del threading._active[MTID]
 

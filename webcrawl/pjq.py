@@ -15,16 +15,14 @@ class RedisQueue(object):
     conditions = {}
 
     def __init__(self, host='localhost', port=6379, db=0, tube='default', timeout=30, items=None, unfinished_tasks=None, weight=[]):
-        import threading
         self.rc = redis.Redis(host='localhost', port=port, db=db)
         self.tube = tube
-        self.weight = weight
         self.unfinished_tasks = 0
 
         if self.tube in RedisQueue.conditions:
             pass
         else:
-            RedisQueue.conditions[self.tube] = {'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event()}
+            RedisQueue.conditions[self.tube] = {'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event(), 'mutex':threading.Lock(), 'weight':weight}
             self.clear()
             RedisQueue.conditions[self.tube]['event'].set()
         if items:
@@ -41,7 +39,7 @@ class RedisQueue(object):
 
     def get(self, block=True, timeout=0):
         # item = self.rc.zrangebyscore(self.tube, float('-inf'), float('+inf'), start=0, num=1)
-        item = self.rc.brpop(['-'.join(['pt', str(self.tube), str(one)]) for one in self.weight], timeout=timeout)
+        item = self.rc.brpop(['-'.join(['pt', str(self.tube), str(one)]) for one in RedisQueue.conditions[self.tube]['weight']], timeout=timeout)
         if item:
             item = item[-1]
             item = pickle.loads(item)
@@ -50,7 +48,7 @@ class RedisQueue(object):
             return None
 
     def empty(self):
-        total = sum([self.rc.llen(one) for one in ['-'.join(['pt', str(self.tube), str(one)]) for one in self.weight]])
+        total = sum([self.rc.llen(one) for one in ['-'.join(['pt', str(self.tube), str(one)]) for one in RedisQueue.conditions[self.tube]['weight']]])
         return total == 0
 
     def copy(self):
@@ -69,19 +67,30 @@ class RedisQueue(object):
         RedisQueue.conditions[self.tube]['event'].wait()
 
     def clear(self):
-        while not self.empty():
-            item = self.get()
-            del item
+        for one in [one for one in self.rc.scan()[-1] if one.startswith(self.tube)]:
+            self.rc.delete(one)
+
+    def rank(self, weight):
+        RedisQueue.conditions[self.tube]['mutex'].acquire()
+        RedisQueue.conditions[self.tube]['weight'].extends(weight)
+        RedisQueue.conditions[self.tube]['weight'].sort()
+        RedisQueue.conditions[self.tube]['mutex'].release()
 
     def __repr__(self):
         return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
+
+    def collect(self):
+        if self.tube in RedisQueue.conditions:
+            del RedisQueue.conditions[self.tube]
+
+    def __del__(self):
+        del self.rc
 
 
 class BeanstalkdQueue(object):
     conditions = {}
 
     def __init__(self, host='localhost', port=11300, tube='default', timeout=30, items=None, unfinished_tasks=None):
-        import threading
         self.bc = beanstalkc.Connection(host, port, connect_timeout=timeout)
         self.tube = tube
         self.bc.use(self.tube)
@@ -131,11 +140,21 @@ class BeanstalkdQueue(object):
 
     def clear(self):
         while not self.empty():
-            item = self.get()
+            item = self.get(timeout=10)
             del item
+
+    def rank(self, weight):
+        pass
 
     def __repr__(self):
         return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
+
+    def collect(self):
+        if self.tube in BeanstalkdQueue.conditions:
+            del BeanstalkdQueue.conditions[self.tube]
+
+    def __del__(self):
+        del self.bc
 
 
 
@@ -212,7 +231,13 @@ def LocalQueue():
             finally:
                 self.all_tasks_done.release()
 
-    return type('PriorityQueue', (threading.queue.Queue, ), {'__init__':__init__, '_init':_init, '_put':_put, '_get':_get, 'task_done':task_done, 'join':join})
+    def rank(self, weight):
+        pass
+
+    def collect(self):
+        pass
+
+    return type('PriorityQueue', (threading.queue.Queue, ), {'__init__':__init__, '_init':_init, '_put':_put, '_get':_get, 'task_done':task_done, 'join':join, 'rank':rank, 'collect':collect})
 
 
 if __name__ == '__main__':
