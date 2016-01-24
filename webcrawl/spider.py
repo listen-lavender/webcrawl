@@ -28,10 +28,10 @@ class SpiderOrigin(Workflows):
         # Keeper.__init__(self)
         self.timeout = timeout
         self.dones = set()
+        self.extractFlow()
 
     def fetchDatas(self, flow, step=0, *args, **kwargs):
         try:
-            self.extractFlow()
             start = time.time()
             self.fire(flow, step=step, *args, **kwargs)
             if self.timeout > -1:

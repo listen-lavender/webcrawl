@@ -72,7 +72,7 @@ class RedisQueue(object):
 
     def rank(self, weight):
         RedisQueue.conditions[self.tube]['mutex'].acquire()
-        RedisQueue.conditions[self.tube]['weight'].extends(weight)
+        RedisQueue.conditions[self.tube]['weight'].extend(weight)
         RedisQueue.conditions[self.tube]['weight'].sort()
         RedisQueue.conditions[self.tube]['mutex'].release()
 
