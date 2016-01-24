@@ -354,7 +354,7 @@ class Workflows(object):
         self.workers = []
         weight = []
         if flow:
-            weight = self.__flows[flow]['weight'][::-1]
+            weight = self.weight(flow)
             tube = str(id(self))
         else:
             tube = 'phoclus'
@@ -365,7 +365,7 @@ class Workflows(object):
             elif self.__queuetype == 'B':
                 self.queue = BeanstalkdQueue(tube=tube)
             else:
-                self.queue = RedisQueue(tube=tube, weight=self.__flows[flow]['weight'][::-1])
+                self.queue = RedisQueue(tube=tube, weight=weight)
         except:
             print 'Wrong type of queue, please choose P or B or start your beanstalkd service.'
 
@@ -427,7 +427,7 @@ class Workflows(object):
             for it in dir(self):
                 it = getattr(self, it)
                 if hasattr(it, 'label'):
-                    self.__flows[it.label] = {'tinder': it, 'terminator': it, 'weight':[]}
+                    self.__flows[it.label] = {'tinder': it, 'terminator': it, 'weight':{'num':0, 'levels':[]}}
             for label, flow in self.__flows.items():
                 flow['hasprior'] = True
                 flow['steps'] = 1
@@ -436,7 +436,7 @@ class Workflows(object):
                 imitate(p, b)
                 flow['hasprior'] = flow['hasprior'] and (
                     b.priority is not None)
-                self.__flows[label]['weight'].append(b.priority)
+                self.__flows[label]['weight']['levels'].append(b.priority)
                 flow['tinder'] = b
                 self.__flowcount['inner'].add(p.label)
                 while hasattr(p, 'next') and hasattr(p.next, 'args') and hasattr(p.next, 'kwargs'):
@@ -451,23 +451,23 @@ class Workflows(object):
                     imitate(p, b)
                     flow['hasprior'] = flow['hasprior'] and (
                         b.priority is not None)
-                    self.__flows[label]['weight'].append(b.priority)
+                    self.__flows[label]['weight']['levels'].append(b.priority)
                     flow['terminator'] = b
             for label, flow in self.__flows.items():
                 if not flow['hasprior']:
-                    self.__flows[label]['weight'] = []
+                    self.__flows[label]['weight']['levels'] = []
                     it = flow['tinder']
                     num = 0
                     it.priority = flow['steps'] - num
-                    self.__flows[label]['weight'].append(it.priority)
+                    self.__flows[label]['weight']['levels'].append(it.priority)
                     while hasattr(it, 'next'):
                         it = it.next
                         num = num + 1
                         it.priority = flow['steps'] - num
-                        self.__flows[label]['weight'].append(it.priority)
+                        self.__flows[label]['weight']['levels'].append(it.priority)
                     flow['hasprior'] = True
-                self.__flows[label]['weight'].append(0)
-                self.__flows[label]['weight'].sort()
+                self.__flows[label]['weight']['levels'].append(0)
+                self.__flows[label]['weight']['levels'].sort()
             print "Inner workflow is set."
 
     def fire(self, flow, step=0, *args, **kwargs):
@@ -496,8 +496,13 @@ class Workflows(object):
     def waitComplete(self):
         self.queue.join()
 
-    def weight(self, flow):
-        return self.__flows[flow]['weight']
+    def weight(self, flow, once=False):
+        if once:
+            self.__flows[flow]['weight']['num'] = self.__flows[flow]['weight']['num'] + 1
+        if once and self.__flows[flow]['weight']['num'] > 1:
+            return []
+        else:
+            return self.__flows[flow]['weight']['levels'][::-1]
 
     def start(self):
         self.prepare()

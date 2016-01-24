@@ -84,7 +84,6 @@ class SpiderOrigin(Workflows):
     def statistic(self):
         for flow in self.dones:
             it = self.tinder(flow)
-            print '==============Statistics of flow %s==============' % flow
             self.stat = {'total': {'succ': 0, 'fail': 0, 'timeout': 0}}
             self.stat[it.__name__] = {}
             self.stat[it.__name__]['succ'] = it.succ
@@ -94,13 +93,10 @@ class SpiderOrigin(Workflows):
             self.stat['total']['fail'] = self.stat['total']['fail'] + it.fail
             self.stat['total']['timeout'] = self.stat[
                 'total']['timeout'] + it.timeout
-            print it.__name__, 'succ: ', it.succ
-            print it.__name__, 'fail: ', it.fail
-            print it.__name__, 'timeout: ', it.timeout
-            if hasattr(it, 'store'):
-                print it.store.__name__, 'succ: ', it.store.succ
-                print it.store.__name__, 'fail: ', it.store.fail
-                print it.store.__name__, 'timeout: ', it.store.timeout
+            # if hasattr(it, 'store'):
+            #     print it.store.__name__, 'succ: ', it.store.succ
+            #     print it.store.__name__, 'fail: ', it.store.fail
+            #     print it.store.__name__, 'timeout: ', it.store.timeout
             while hasattr(it, 'next'):
                 self.stat[it.next.__name__] = {}
                 self.stat[it.next.__name__]['succ'] = it.next.succ
@@ -112,18 +108,11 @@ class SpiderOrigin(Workflows):
                     'total']['fail'] + it.next.fail
                 self.stat['total']['timeout'] = self.stat[
                     'total']['timeout'] + it.next.timeout
-                print it.next.__name__, 'succ: ', it.next.succ
-                print it.next.__name__, 'fail: ', it.next.fail
-                print it.next.__name__, 'timeout: ', it.next.timeout
-                if hasattr(it.next, 'store'):
-                    print it.next.store.__name__, 'succ: ', it.next.store.succ
-                    print it.next.store.__name__, 'fail: ', it.next.store.fail
-                    print it.next.store.__name__, 'timeout: ', it.next.store.timeout
+                # if hasattr(it.next, 'store'):
+                #     print it.next.store.__name__, 'succ: ', it.next.store.succ
+                #     print it.next.store.__name__, 'fail: ', it.next.store.fail
+                #     print it.next.store.__name__, 'timeout: ', it.next.store.timeout
                 it = it.next
-            print 'total succ: ', self.stat['total']['succ']
-            print 'total fail: ', self.stat['total']['fail']
-            print 'total timeout: ', self.stat['total']['timeout']
-            print 'total time: ', self.totaltime
 
     def now():
         return datetime.datetime.now()
