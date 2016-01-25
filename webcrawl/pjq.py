@@ -76,6 +76,22 @@ class RedisQueue(object):
         RedisQueue.conditions[self.tube]['weight'].sort()
         RedisQueue.conditions[self.tube]['mutex'].release()
 
+    def traversal(self, skip=0, limit=10):
+        weight = copy.deepcopy(RedisQueue.conditions[self.tube]['weight'])
+        weight = list(set(weight))
+        weight.sort()
+        result = []
+        start = skip
+        end = limit - 1
+        for w in weight:
+            result.extend(self.rc.lrange('-'.join(['pt', str(self.tube), str(priority)]), start, end))
+            if len(result) == limit:
+                break
+            else:
+                start = 0
+                end = limit - len(result) - 1
+        return result
+
     def __repr__(self):
         return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
 

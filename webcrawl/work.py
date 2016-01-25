@@ -467,7 +467,6 @@ class Workflows(object):
                         self.__flows[label]['weight']['levels'].append(it.priority)
                     flow['hasprior'] = True
                 self.__flows[label]['weight']['levels'].append(0)
-                self.__flows[label]['weight']['levels'].sort()
             print "Inner workflow is set."
 
     def fire(self, flow, step=0, *args, **kwargs):
