@@ -82,7 +82,7 @@ class RedisQueue(object):
         weight.sort()
         result = []
         start = skip
-        end = limit - 1
+        end = skip + limit - 1
         for w in weight:
             result.extend(self.rc.lrange('-'.join(['pt', str(self.tube), str(priority)]), start, end))
             if len(result) == limit:
