@@ -67,7 +67,7 @@ class RedisQueue(object):
         RedisQueue.conditions[self.tube]['event'].wait()
 
     def clear(self):
-        for one in [one for one in self.rc.scan()[-1] if one.startswith(self.tube)]:
+        for one in [one for one in self.rc.scan()[-1] if one.startswith('pt-%s' % self.tube)]:
             self.rc.delete(one)
 
     def rank(self, weight):
