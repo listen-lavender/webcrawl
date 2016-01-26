@@ -20,6 +20,8 @@ requires = [
     'chardet',
     'PIL',
     'gevent',
+    'pycrypto',
+    'redis',
     'beanstalkc',
     ]
 
