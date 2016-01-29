@@ -89,11 +89,13 @@ class SpiderOrigin(Workflows):
             self.stat[it.__name__]['succ'] = it.succ
             self.stat[it.__name__]['fail'] = it.fail
             self.stat[it.__name__]['timeout'] = it.timeout
-            self.stat['total']['succ'] = self.stat['total']['succ'] + it.succ
-            self.stat['total']['fail'] = self.stat['total']['fail'] + it.fail
-            self.stat['total']['timeout'] = self.stat[
-                'total']['timeout'] + it.timeout
-            # if hasattr(it, 'store'):
+            self.stat['total']['succ'] += it.succ
+            self.stat['total']['fail'] += it.fail
+            self.stat['total']['timeout'] += it.timeout
+            if hasattr(it, 'store'):
+                self.stat['total']['succ'] += it.store.succ
+                self.stat['total']['fail'] += it.store.fail
+                self.stat['total']['timeout'] += it.store.timeout
             #     print it.store.__name__, 'succ: ', it.store.succ
             #     print it.store.__name__, 'fail: ', it.store.fail
             #     print it.store.__name__, 'timeout: ', it.store.timeout
@@ -102,13 +104,13 @@ class SpiderOrigin(Workflows):
                 self.stat[it.next.__name__]['succ'] = it.next.succ
                 self.stat[it.next.__name__]['fail'] = it.next.fail
                 self.stat[it.next.__name__]['timeout'] = it.next.timeout
-                self.stat['total']['succ'] = self.stat[
-                    'total']['succ'] + it.next.succ
-                self.stat['total']['fail'] = self.stat[
-                    'total']['fail'] + it.next.fail
-                self.stat['total']['timeout'] = self.stat[
-                    'total']['timeout'] + it.next.timeout
-                # if hasattr(it.next, 'store'):
+                self.stat['total']['succ'] += it.next.succ
+                self.stat['total']['fail'] += it.next.fail
+                self.stat['total']['timeout'] += it.next.timeout
+                if hasattr(it.next, 'store'):
+                    self.stat['total']['succ'] += it.next.store.succ
+                    self.stat['total']['fail'] += it.next.store.fail
+                    self.stat['total']['timeout'] += it.next.store.timeout
                 #     print it.next.store.__name__, 'succ: ', it.next.store.succ
                 #     print it.next.store.__name__, 'fail: ', it.next.store.fail
                 #     print it.next.store.__name__, 'timeout: ', it.next.store.timeout
