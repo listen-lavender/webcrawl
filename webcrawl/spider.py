@@ -21,9 +21,8 @@ class SpiderOrigin(Workflows):
     __lasttime = datetime.datetime.now()
     __lock = threading.Lock()
 
-    def __init__(self, worknum=WORKNUM, queuetype=QUEUETYPE, worktype=WORKTYPE, timeout=-1):
-        super(SpiderOrigin, self).__init__(
-            worknum=worknum, queuetype=queuetype, worktype=worktype)
+    def __init__(self, worknum=WORKNUM, queuetype=QUEUETYPE, worktype=WORKTYPE, timeout=-1, tid=0):
+        super(SpiderOrigin, self).__init__(worknum=worknum, queuetype=queuetype, worktype=worktype, tid=tid)
         # Workflows.__init__(self, worknum=worknum, queuetype=queuetype, worktype=worktype)
         # Keeper.__init__(self)
         self.timeout = timeout

@@ -204,7 +204,7 @@ class Nevertimeout(object):
         pass
 
 
-def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, times):
+def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, times, tid):
     index = result.next()
     if index and times == 0:
         if type(method.index) == int:
@@ -218,39 +218,39 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, tim
                 kwargs, **{method.index: index})
         else:
             raise "Incorrect arguments."
-        workqueue.put((priority, methodId, 0, indexargs, indexkwargs))
+        workqueue.put((priority, methodId, 0, indexargs, indexkwargs, tid))
 
 
-def handleNextStore(workqueue, retvar, method, hasnext=False, hasstore=False):
+def handleNextStore(workqueue, retvar, method, tid, hasnext=False, hasstore=False):
     if retvar is None:
         pass
     elif type(retvar) == dict:
         hasnext and workqueue.put(
-            (method.next.priority, id(method.next), 0, (), retvar))
+            (method.next.priority, id(method.next), 0, (), retvar, tid))
         hasstore and workqueue.put(
-            (method.store.priority, id(method.store), 0, (), {'obj': retvar['obj']}))
+            (method.store.priority, id(method.store), 0, (), {'obj': retvar['obj']}, tid))
     elif type(retvar) == tuple:
         hasnext and workqueue.put(
-            (method.next.priority, id(method.next), 0, retvar, {}))
+            (method.next.priority, id(method.next), 0, retvar, {}, tid))
         hasstore and workqueue.put(
-            (method.store.priority, id(method.store), 0, (retvar[0],), {}))
+            (method.store.priority, id(method.store), 0, (retvar[0],), {}, tid))
     else:
         hasnext and workqueue.put(
-            (method.next.priority, id(method.next), 0, (retvar,), {}))
+            (method.next.priority, id(method.next), 0, (retvar,), {}, tid))
         hasstore and workqueue.put(
-            (method.store.priority, id(method.store), 0, (retvar,), {}))
+            (method.store.priority, id(method.store), 0, (retvar,), {}, tid))
         # raise "Incorrect result for next function."
 
 
-def handleExcept(workqueue, method, args, kwargs, times, methodId, count='fail'):
+def handleExcept(workqueue, method, args, kwargs, times, methodId, tid, count='fail'):
     if times < method.retry:
         times = times + 1
-        workqueue.put((priority, methodId, times, args, kwargs))
+        workqueue.put((priority, methodId, times, args, kwargs, tid))
     else:
         setattr(method, count, getattr(method, count)+1)
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
-        _print(method.__name__, ': %s, %s \n' %
+        _print(tid, method.__name__, ': %s, %s \n' %
                (str(args), str(kwargs)), ','.join(err_messages), '\n')
 
 
@@ -263,7 +263,7 @@ def geventwork(workqueue):
             item = workqueue.get(timeout=10)
             if item is None:
                 continue
-            priority, methodId, times, args, kwargs = item
+            priority, methodId, times, args, kwargs, tid = item
             method = ctypes.cast(methodId, ctypes.py_object).value
             try:
                 if method.timelimit > 0:
@@ -275,27 +275,27 @@ def geventwork(workqueue):
                 elif isinstance(result, types.GeneratorType):
                     try:
                         hasattr(method, 'index') and handleIndex(
-                            workqueue, result, method, args, kwargs, priority, methodId, times)
+                            workqueue, result, method, args, kwargs, priority, methodId, times, tid)
                         for retvar in result:
                             handleNextStore(
-                                workqueue, retvar, method, hasattr(method, 'next'), hasattr(method, 'store'))
+                                workqueue, retvar, method, tid, hasattr(method, 'next'), hasattr(method, 'store'))
                         method.succ = method.succ + 1
                     except TimeoutError:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodId, 'timeout')
+                            workqueue, method, args, kwargs, times, methodId, tid, 'timeout')
                     except:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodId, 'fail')
+                            workqueue, method, args, kwargs, times, methodId, tid, 'fail')
                 else:
                     handleNextStore(
-                        workqueue, result, method, hasattr(method, 'next'), hasattr(method, 'store'))
+                        workqueue, result, method, tid, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodId, 'timeout')
+                    workqueue, method, args, kwargs, times, methodId, tid, 'timeout')
             except:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodId, 'fail')
+                    workqueue, method, args, kwargs, times, methodId, tid, 'fail')
             finally:
                 workqueue.task_done()
                 timer.cancel()
@@ -332,7 +332,7 @@ class Workflows(object):
         任务流
     """
 
-    def __init__(self, worknum, queuetype, worktype):
+    def __init__(self, worknum, queuetype, worktype, tid=0):
         if worktype == 'COROUTINE':
             monkey.patch_all(Event=True)
             gid = threading._get_ident()
@@ -349,6 +349,7 @@ class Workflows(object):
 
         self.queue = None
         self.workers = []
+        self.tid = tid
         
     def prepare(self, flow=None):
         self.workers = []
@@ -479,7 +480,7 @@ class Workflows(object):
             except:
                 print 'Flow %s has no %d steps.' % (flow, step)
             else:
-                self.queue.put((it.priority, id(it), 0, args, kwargs))
+                self.queue.put((it.priority, id(it), 0, args, kwargs, self.tid))
                 for worker in self.workers:
                     if self.__worktype == 'COROUTINE':
                         gevent.spawn(worker)
@@ -512,9 +513,9 @@ class Workflows(object):
                 worker.setDaemon(True)
                 worker.start()
 
-    def task(self, weight, section, *args, **kwargs):
+    def task(self, weight, section, tid, *args, **kwargs):
         self.queue.rank(weight)
-        self.queue.put((section.priority, id(section), 0, args, kwargs))
+        self.queue.put((section.priority, id(section), 0, args, kwargs, tid))
 
     def __del__(self):
         if self.queue is not None:
