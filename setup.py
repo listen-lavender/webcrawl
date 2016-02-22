@@ -12,7 +12,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 README = open(os.path.join(here, 'README.rst')).read()
 CHANGES = open(os.path.join(here, 'CHANGES.rst')).read()
 
-requires = [
+install_requires = [
     'requests>=2.2.1',
     'lxml>=3.3.2',
     'gitpython', # 0.3.2.RC1
@@ -29,18 +29,12 @@ webcrawl = __import__('webcrawl')
 setup(name='webcrawl',
 version=webcrawl.__version__,
 description='wecatch webcrawl',
-long_description='',
 author='haokuan',
 author_email='jingdaohao@gmail.com',
-url='http://www.google.com',
+url='https://github.com/listen-lavender/webcrawl',
 keywords='wecatch > ',
 packages=find_packages(),
-# package_data={'':['*.js', '*.css']},
-namespace_packages=['webcrawl',],
-include_package_data=True,
-zip_safe=False,
-install_requires=requires,
-entry_points="",
+install_requires=install_requires,
 scripts=['bin/browse'],
 )
 

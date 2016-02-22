@@ -30,7 +30,7 @@ class RedisQueue(object):
                 self.put(item)
 
     def put(self, item):
-        priority, methodId, times, args, kwargs = item
+        priority, methodId, times, args, kwargs, tid = item
         # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
         self.rc.lpush('-'.join(['pt', str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodId': methodId, 'times': times, 'args': args, 'kwargs': kwargs}))
@@ -122,7 +122,7 @@ class BeanstalkdQueue(object):
                 self.put(item)
 
     def put(self, item):
-        priority, methodId, times, args, kwargs = item
+        priority, methodId, times, args, kwargs, tid = item
         self.bc.put(pickle.dumps({'priority': priority, 'methodId': methodId,
                                 'times': times, 'args': args, 'kwargs': kwargs}), priority=priority)
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] += 1
