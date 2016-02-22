@@ -349,7 +349,7 @@ class Workflows(object):
 
         self.queue = None
         self.workers = []
-        self.tid = tid
+        self.tid = str(tid)
         
     def prepare(self, flow=None):
         self.workers = []
