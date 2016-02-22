@@ -349,7 +349,7 @@ class Workflows(object):
 
         self.queue = None
         self.workers = []
-        self.tid = str(tid)
+        self.tid = tid
         
     def prepare(self, flow=None):
         self.workers = []
@@ -480,7 +480,7 @@ class Workflows(object):
             except:
                 print 'Flow %s has no %d steps.' % (flow, step)
             else:
-                self.queue.put((it.priority, id(it), 0, args, kwargs, self.tid))
+                self.queue.put((it.priority, id(it), 0, args, kwargs, str(self.tid)))
                 for worker in self.workers:
                     if self.__worktype == 'COROUTINE':
                         gevent.spawn(worker)
@@ -515,7 +515,7 @@ class Workflows(object):
 
     def task(self, weight, section, tid, *args, **kwargs):
         self.queue.rank(weight)
-        self.queue.put((section.priority, id(section), 0, args, kwargs, tid))
+        self.queue.put((section.priority, id(section), 0, args, kwargs, str(tid)))
 
     def __del__(self):
         if self.queue is not None:
