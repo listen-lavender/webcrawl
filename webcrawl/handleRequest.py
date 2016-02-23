@@ -125,6 +125,7 @@ def getJsonNodeContent(node, consrc):
 
 def requformat(r, coding, dirtys, myfilter, format, filepath):
     code = r.status_code
+    dlf = r.content
     content = r.content
     content = content.decode(coding, 'ignore').encode('utf-8')
     if not code in [200, 301, 302]:
@@ -146,7 +147,7 @@ def requformat(r, coding, dirtys, myfilter, format, filepath):
         raise FormatError(format)
     if FILE.make and filepath is not None:
         fi = open(FILE.dir + filepath, 'w')
-        fi.write(content)
+        fi.write(dlf)
         fi.close()
     return content
 
