@@ -23,6 +23,7 @@ install_requires = [
     'pycrypto',
     'redis',
     'beanstalkc',
+    'kokolog',
     ]
 
 webcrawl = __import__('webcrawl')

@@ -42,8 +42,8 @@ def patch_thread(threading=True, _threading_local=True, Queue=True, Event=False)
 monkey.patch_thread = patch_thread
 
 try:
-    from multilog.aboutfile import modulename, modulepath
-    from multilog.prettyprint import logprint
+    from kokolog.aboutfile import modulename, modulepath
+    from kokolog.prettyprint import logprint
 except:
     def modulename(n):
         return None
@@ -250,8 +250,8 @@ def handleExcept(workqueue, method, args, kwargs, times, methodId, tid, count='f
         setattr(method, count, getattr(method, count)+1)
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
-        _print(tid, method.__name__, ': %s, %s \n' %
-               (str(args), str(kwargs)), ','.join(err_messages), '\n')
+        txt = ','.join(err_messages)
+        _print(tid=tid, sname=method.__name__, args=str(args), kwargs=str(kwargs), txt=txt)
 
 
 def geventwork(workqueue):
