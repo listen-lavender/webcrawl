@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # coding=utf-8
 
-import copy, random, math
+import copy, math
 
 def charToHex(n):
     t = 48
