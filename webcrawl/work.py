@@ -263,7 +263,8 @@ def geventwork(workqueue):
             item = workqueue.get(timeout=10)
             if item is None:
                 continue
-            priority, methodId, times, args, kwargs, tid = item
+            stxt, sid = item
+            priority, methodId, times, args, kwargs, tid = stxt
             method = ctypes.cast(methodId, ctypes.py_object).value
             try:
                 if method.timelimit > 0:
@@ -297,7 +298,7 @@ def geventwork(workqueue):
                 handleExcept(
                     workqueue, method, args, kwargs, times, methodId, tid, 'fail')
             finally:
-                workqueue.task_done()
+                workqueue.task_done(item)
                 timer.cancel()
                 del timer
 
@@ -491,7 +492,7 @@ class Workflows(object):
             print 'There is no work flow.'
 
     def exit(self):
-        self.queue.task_done(force=True)
+        self.queue.task_done(None, force=True)
 
     def waitComplete(self):
         self.queue.join()

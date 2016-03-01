@@ -8,6 +8,7 @@ import threading
 import queue
 threading.queue = queue
 import cPickle as pickle
+from bson import ObjectId
 
 from character import unicode2utf8
 
@@ -15,7 +16,7 @@ class RedisQueue(object):
     conditions = {}
 
     def __init__(self, host='localhost', port=6379, db=0, tube='default', timeout=30, items=None, unfinished_tasks=None, weight=[]):
-        self.rc = redis.Redis(host='localhost', port=port, db=db)
+        self.rc = redis.StrictRedis(host='localhost', port=port, db=db)
         self.tube = tube
         self.unfinished_tasks = 0
 
@@ -29,11 +30,16 @@ class RedisQueue(object):
             for item in items:
                 self.put(item)
 
+    def sid(self):
+        return str(ObjectId())
+
     def put(self, item):
         priority, methodId, times, args, kwargs, tid = item
         # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
-        self.rc.lpush('-'.join(['pt', str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodId': methodId, 'times': times, 'args': args, 'kwargs': kwargs}))
+        sid = self.sid()
+        self.rc.lpush('-'.join(['pt', str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodId': methodId, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
+        self.rc.hset('ptstate', sid, 'ready')
         RedisQueue.conditions[self.tube]['unfinished_tasks'] += 1
         RedisQueue.conditions[self.tube]['event'].clear()
 
@@ -43,7 +49,8 @@ class RedisQueue(object):
         if item:
             item = item[-1]
             item = pickle.loads(item)
-            return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'])
+            self.rc.hset('ptstate', item['sid'], 'running')
+            return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
         else:
             return None
 
@@ -54,7 +61,11 @@ class RedisQueue(object):
     def copy(self):
         pass
 
-    def task_done(self, force=False):
+    def task_done(self, item, force=False):
+        if item is not None:
+            stxt, sid = item
+            self.rc.hset('ptstate', item['sid'], 'completed')
+            self.rc.hdel('ptstate', item['sid'])
         if RedisQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
             # raise ValueError('task_done() called too many times')
             pass
@@ -84,7 +95,10 @@ class RedisQueue(object):
         start = skip
         end = skip + limit - 1
         for w in weight:
-            result.extend(self.rc.lrange('-'.join(['pt', str(self.tube), str(priority)]), start, end))
+            for item in self.rc.lrange('-'.join(['pt', str(self.tube), str(priority)]), start, end):
+                item = pickle.loads(item)
+                item['rstate'] = self.rc.hget('ptstate', item['sid'], 'completed')
+                result.append(item)
             if len(result) == limit:
                 break
             else:
@@ -124,7 +138,7 @@ class BeanstalkdQueue(object):
     def put(self, item):
         priority, methodId, times, args, kwargs, tid = item
         self.bc.put(pickle.dumps({'priority': priority, 'methodId': methodId,
-                                'times': times, 'args': args, 'kwargs': kwargs}), priority=priority)
+                                'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid}), priority=priority)
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] += 1
         BeanstalkdQueue.conditions[self.tube]['event'].clear()
 
@@ -133,7 +147,7 @@ class BeanstalkdQueue(object):
         if item:
             item.delete()
             item = pickle.loads(item.body)
-            return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'])
+            return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), None
         else:
             return None
 
@@ -143,7 +157,11 @@ class BeanstalkdQueue(object):
     def copy(self):
         pass
 
-    def task_done(self, force=False):
+    def task_done(self, item, force=False):
+        if item is not None:
+            stxt, sid = item
+            self.rc.hset('ptstate', item['sid'], 'completed')
+            self.rc.hdel('ptstate', item['sid'])
         if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
             raise ValueError('task_done() called too many times')
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] -= 1
@@ -214,9 +232,13 @@ def LocalQueue():
             self._cond.clear()
 
     def _get(self, heappop=heapq.heappop):
-        return heappop(self.queue)
+        return heappop(self.queue), None
 
-    def task_done(self, force=False):
+    def task_done(self, item, force=False):
+        if item is not None:
+            stxt, sid = item
+            self.rc.hset('ptstate', item['sid'], 'completed')
+            self.rc.hdel('ptstate', item['sid'])
         if self.is_patch:
             if self.unfinished_tasks <= 0:
                 raise ValueError('task_done() called too many times')
