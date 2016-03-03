@@ -121,7 +121,7 @@ class RSA(object):
             u = 0
             for i in range(0, len(n['digits'])):
                 f = n['digits'][i] - t['digits'][i] + u
-                r['digits'][i] = f % self.biRadix
+                r['digits'][i] = f & self.maxDigitVal
                 if r['digits'][i]<0:
                     r['digits'][i] += self.biRadix
                 u = 0 - int(f < 0)
@@ -129,7 +129,7 @@ class RSA(object):
                 u = 0
                 for i in range(0, len(n['digits'])):
                     f = 0 - r['digits'][i] + u
-                    r['digits'][i] = f % self.biRadix,
+                    r['digits'][i] = f & self.maxDigitVal
                     if r['digits'][i] < 0:
                         r['digits'][i] += self.biRadix
                 u = 0 - int(f < 0)
@@ -149,7 +149,7 @@ class RSA(object):
             i = 0
             while i < len(n['digits']):
                 f = n['digits'][i] + t['digits'][i] + u
-                r['digits'][i] = f % self.biRadix
+                r['digits'][i] = f & self.maxDigitVal
                 u = int(f >= self.biRadix)
                 i = i + 1
             r['isNeg'] = n['isNeg']
