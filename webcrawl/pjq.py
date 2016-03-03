@@ -12,6 +12,8 @@ from bson import ObjectId
 
 from character import unicode2utf8
 
+DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETRY'}
+
 class RedisQueue(object):
     conditions = {}
 
@@ -39,7 +41,10 @@ class RedisQueue(object):
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
         sid = self.sid()
         self.rc.lpush('-'.join(['pt', str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodId': methodId, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
-        self.rc.hset('ptstate', sid, 'ready')
+        if times == 0:
+            self.rc.hset('ptstate', sid, 2)
+        else:
+            self.rc.hset('ptstate', sid, 4)
         RedisQueue.conditions[self.tube]['unfinished_tasks'] += 1
         RedisQueue.conditions[self.tube]['event'].clear()
 
@@ -49,7 +54,7 @@ class RedisQueue(object):
         if item:
             item = item[-1]
             item = pickle.loads(item)
-            self.rc.hset('ptstate', item['sid'], 'running')
+            self.rc.hset('ptstate', item['sid'], 3)
             return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
         else:
             return None
@@ -63,9 +68,9 @@ class RedisQueue(object):
 
     def task_done(self, item, force=False):
         if item is not None:
-            stxt, sid = item
-            self.rc.hset('ptstate', item['sid'], 'completed')
-            self.rc.hdel('ptstate', item['sid'])
+            tid, sname, priority, times, args, kwargs, sid = item
+            _print(tid=tid, sname=sname, priority=priority, times=times, args=str(args), kwargs=str(kwargs), txt=None)
+            self.rc.hdel('ptstate', sid)
         if RedisQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
             # raise ValueError('task_done() called too many times')
             pass
@@ -95,12 +100,16 @@ class RedisQueue(object):
         start = skip
         end = skip + limit - 1
         for w in weight:
-            for item in self.rc.lrange('-'.join(['pt', str(self.tube), str(priority)]), start, end):
+            for item in self.rc.lrange('-'.join(['pt', str(self.tube), str(w)]), start, end):
                 item = pickle.loads(item)
-                item['rstate'] = self.rc.hget('ptstate', item['sid'], 'completed')
+                item['status_num'] = self.rc.hget('ptstate', item['sid'], 3)
+                if len(result) + skip > DESCRIBE['READY']:
+                    item['status_desc'] = DESCRIBE.get(item['status_num'])
+                else:
+                    item['status_desc'] = 'ready'
                 result.append(item)
-            if len(result) == limit:
-                break
+                if len(result) == limit:
+                    break
             else:
                 start = 0
                 end = limit - len(result) - 1
@@ -158,10 +167,6 @@ class BeanstalkdQueue(object):
         pass
 
     def task_done(self, item, force=False):
-        if item is not None:
-            stxt, sid = item
-            self.rc.hset('ptstate', item['sid'], 'completed')
-            self.rc.hdel('ptstate', item['sid'])
         if BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
             raise ValueError('task_done() called too many times')
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] -= 1
@@ -235,10 +240,6 @@ def LocalQueue():
         return heappop(self.queue), None
 
     def task_done(self, item, force=False):
-        if item is not None:
-            stxt, sid = item
-            self.rc.hset('ptstate', item['sid'], 'completed')
-            self.rc.hdel('ptstate', item['sid'])
         if self.is_patch:
             if self.unfinished_tasks <= 0:
                 raise ValueError('task_done() called too many times')

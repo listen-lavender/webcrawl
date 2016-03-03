@@ -242,7 +242,7 @@ def handleNextStore(workqueue, retvar, method, tid, hasnext=False, hasstore=Fals
         # raise "Incorrect result for next function."
 
 
-def handleExcept(workqueue, method, args, kwargs, times, methodId, tid, count='fail'):
+def handleExcept(workqueue, method, args, kwargs, priority, methodId, times, tid, count='fail'):
     if times < method.retry:
         times = times + 1
         workqueue.put((priority, methodId, times, args, kwargs, tid))
@@ -251,7 +251,7 @@ def handleExcept(workqueue, method, args, kwargs, times, methodId, tid, count='f
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
         txt = ','.join(err_messages)
-        _print(tid=tid, sname=method.__name__, args=str(args), kwargs=str(kwargs), txt=txt)
+        _print(tid=tid, sname=method.__name__, priority=priority, times=times, args=str(args), kwargs=str(kwargs), txt=txt)
 
 
 def geventwork(workqueue):
@@ -283,22 +283,22 @@ def geventwork(workqueue):
                         method.succ = method.succ + 1
                     except TimeoutError:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodId, tid, 'timeout')
+                            workqueue, method, args, kwargs, priority, methodId, times, tid, 'timeout')
                     except:
                         handleExcept(
-                            workqueue, method, args, kwargs, times, methodId, tid, 'fail')
+                            workqueue, method, args, kwargs, priority, methodId, times, tid, 'fail')
                 else:
                     handleNextStore(
                         workqueue, result, method, tid, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodId, tid, 'timeout')
+                    workqueue, method, args, kwargs, priority, methodId, times, tid, 'timeout')
             except:
                 handleExcept(
-                    workqueue, method, args, kwargs, times, methodId, tid, 'fail')
+                    workqueue, method, args, kwargs, priority, methodId, times, tid, 'fail')
             finally:
-                workqueue.task_done(item)
+                workqueue.task_done((tid, method.__name__, priority, times, args, kwargs, sid))
                 timer.cancel()
                 del timer
 
