@@ -259,7 +259,7 @@ def handleExcept(workqueue, method, args, kwargs, priority, methodId, times, tid
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
         txt = ','.join(err_messages)
-        _print(tid=tid, sid=sid, sname=method.__name__, priority=priority, times=times, args=str(args), kwargs=str(kwargs), txt=txt)
+        _print('', tid=tid, sid=sid, sname=method.__name__, priority=priority, times=times, args=str(args), kwargs=str(kwargs), txt=txt)
 
 
 def geventwork(workqueue):
@@ -386,10 +386,10 @@ class Workflows(object):
                     worker = functools.partial(geventwork, self.queue)
                 elif self.__queuetype == 'B':
                     worker = functools.partial(
-                        geventwork, BeanstalkdQueue(tube=tube))
+                        geventwork, BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube)))
                 else:
                     worker = functools.partial(
-                        geventwork, RedisQueue(tube=tube, weight=weight))
+                        geventwork, RedisQueue(weight=weight, **dict(DataQueue.redis, **tube)))
                 self.workers.append(worker)
         else:
             from time import sleep
@@ -397,9 +397,9 @@ class Workflows(object):
                 if self.__queuetype == 'P':
                     worker = Foreverworker(self.queue)
                 elif self.__queuetype == 'B':
-                    worker = Foreverworker(BeanstalkdQueue(tube=tube))
+                    worker = Foreverworker(BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube)))
                 else:
-                    worker = Foreverworker(RedisQueue(tube=tube, weight=weight))
+                    worker = Foreverworker(RedisQueue(weight=weight, **dict(DataQueue.redis, **tube)))
                 self.workers.append(worker)
 
     def tinder(self, flow):

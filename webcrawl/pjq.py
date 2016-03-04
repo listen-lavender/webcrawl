@@ -57,27 +57,27 @@ class RedisQueue(object):
         # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
         sid = self.sid()
-        self.rc.lpush('-'.join(['pt', str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodId': methodId, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
+        self.rc.lpush('-'.join([str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodId': methodId, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
         if times == 0:
-            self.rc.hset('ptstate', sid, 2)
+            self.rc.hset('pholcus-state', sid, 2)
         else:
-            self.rc.hset('ptstate', sid, 4)
+            self.rc.hset('pholcus-state', sid, 4)
         RedisQueue.conditions[self.tube]['unfinished_tasks'] += 1
         RedisQueue.conditions[self.tube]['event'].clear()
 
     def get(self, block=True, timeout=0):
         # item = self.rc.zrangebyscore(self.tube, float('-inf'), float('+inf'), start=0, num=1)
-        item = self.rc.brpop(['-'.join(['pt', str(self.tube), str(one)]) for one in RedisQueue.conditions[self.tube]['weight']], timeout=timeout)
+        item = self.rc.brpop(['-'.join([str(self.tube), str(one)]) for one in RedisQueue.conditions[self.tube]['weight']], timeout=timeout)
         if item:
             item = item[-1]
             item = pickle.loads(item)
-            self.rc.hset('ptstate', item['sid'], 3)
+            self.rc.hset('pholcus-state', item['sid'], 3)
             return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
         else:
             return None
 
     def empty(self):
-        total = sum([self.rc.llen(one) for one in ['-'.join(['pt', str(self.tube), str(one)]) for one in RedisQueue.conditions[self.tube]['weight']]])
+        total = sum([self.rc.llen(one) for one in ['-'.join([str(self.tube), str(one)]) for one in RedisQueue.conditions[self.tube]['weight']]])
         return total == 0
 
     def copy(self):
@@ -86,8 +86,8 @@ class RedisQueue(object):
     def task_done(self, item, force=False):
         if item is not None:
             tid, sname, priority, times, args, kwargs, sid = item
-            _print(tid=tid, sname=sname, priority=priority, times=times, args=str(args), kwargs=str(kwargs), txt=None)
-            self.rc.hdel('ptstate', sid)
+            _print('', tid=tid, sid=sid, sname=sname, priority=priority, times=times, args=str(args), kwargs=str(kwargs), txt=None)
+            self.rc.hdel('pholcus-state', sid)
         if RedisQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
             # raise ValueError('task_done() called too many times')
             pass
@@ -100,7 +100,7 @@ class RedisQueue(object):
         RedisQueue.conditions[self.tube]['event'].wait()
 
     def clear(self):
-        for one in [one for one in self.rc.scan()[-1] if one.startswith('pt-%s' % self.tube)]:
+        for one in [one for one in self.rc.scan()[-1] if one.startswith('%s' % self.tube)]:
             self.rc.delete(one)
 
     def rank(self, weight):
@@ -117,9 +117,9 @@ class RedisQueue(object):
         start = skip
         end = skip + limit - 1
         for w in weight:
-            for item in self.rc.lrange('-'.join(['pt', str(self.tube), str(w)]), start, end):
+            for item in self.rc.lrange('-'.join([str(self.tube), str(w)]), start, end):
                 item = pickle.loads(item)
-                item['status_num'] = self.rc.hget('ptstate', item['sid'], 3)
+                item['status_num'] = self.rc.hget('pholcus-state', item['sid'], 3)
                 if len(result) + skip > DESCRIBE['READY']:
                     item['status_desc'] = DESCRIBE.get(item['status_num'])
                 else:
