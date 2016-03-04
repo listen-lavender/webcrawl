@@ -11,6 +11,7 @@ import weakref
 import gevent
 import functools
 import ctypes
+from . import MyLocal
 MTID = threading._get_ident()  # id of main thread
 from gevent import monkey, Timeout
 
@@ -40,6 +41,19 @@ def patch_thread(threading=True, _threading_local=True, Queue=True, Event=False)
         _threading_local.local = local
 
 monkey.patch_thread = patch_thread
+DataQueue = MyLocal(
+        redis={
+            'host':'localhost',
+            'port':6379,
+            'db':0,
+            'tube':'pholcus-task',
+        },
+        beanstalkd={
+            'host':'localhost',
+            'port':11300,
+            'tube':'pholcus-task',
+        }
+    )
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -58,12 +72,6 @@ except:
 
 _print, logger = logprint(modulename(__file__), modulepath(__file__))
 
-
-class MyLocal(object):
-
-    def __init__(self, **kwargs):
-        # self.__dict__ = dict(self.__dict__, **kwargs)
-        self.__dict__.update(**kwargs)
 
 RETRY = 0
 TIMELIMIT = 0
@@ -355,19 +363,18 @@ class Workflows(object):
     def prepare(self, flow=None):
         self.workers = []
         weight = []
+        tube = {}
         if flow:
             weight = self.weight(flow)
-            tube = str(id(self))
-        else:
-            tube = 'phoclus'
+            tube['tube'] = str(id(self))
 
         try:
             if self.__queuetype == 'P':
                 self.queue = LocalQueue()()
             elif self.__queuetype == 'B':
-                self.queue = BeanstalkdQueue(tube=tube)
+                self.queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
             else:
-                self.queue = RedisQueue(tube=tube, weight=weight)
+                self.queue = RedisQueue(weight=weight, **dict(DataQueue.redis, **tube))
         except:
             print 'Wrong type of queue, please choose P or B or start your beanstalkd service.'
 

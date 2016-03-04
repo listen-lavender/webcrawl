@@ -17,7 +17,7 @@ from Queue import Queue
 from lxml import etree as ET
 from lxml import html as HT
 from character import unicode2utf8
-from work import MyLocal
+from . import MyLocal
 from exception import URLFailureException, MarktypeError, FormatError
 
 try:

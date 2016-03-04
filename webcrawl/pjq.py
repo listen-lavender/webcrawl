@@ -12,6 +12,23 @@ from bson import ObjectId
 
 from character import unicode2utf8
 
+try:
+    from kokolog.aboutfile import modulename, modulepath
+    from kokolog.prettyprint import logprint
+except:
+    def modulename(n):
+        return None
+
+    def modulepath(p):
+        return None
+
+    def logprint(n, p):
+        def _wraper(*args, **kwargs):
+            print(' '.join(args))
+        return _wraper, None
+
+_print, logger = logprint(modulename(__file__), modulepath(__file__))
+
 DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETRY'}
 
 class RedisQueue(object):
