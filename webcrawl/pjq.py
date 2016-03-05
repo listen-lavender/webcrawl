@@ -34,7 +34,7 @@ DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETR
 class RedisQueue(object):
     conditions = {}
 
-    def __init__(self, host='localhost', port=6379, db=0, tube='default', timeout=30, items=None, unfinished_tasks=None, weight=[]):
+    def __init__(self, host='localhost', port=6379, db=0, tube='default', timeout=30, items=None, unfinished_tasks=None, init=True, weight=[]):
         self.rc = redis.StrictRedis(host='localhost', port=port, db=db)
         self.tube = tube
         self.unfinished_tasks = 0
@@ -43,8 +43,9 @@ class RedisQueue(object):
             pass
         else:
             RedisQueue.conditions[self.tube] = {'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event(), 'mutex':threading.Lock(), 'weight':weight}
-            self.clear()
             RedisQueue.conditions[self.tube]['event'].set()
+        if init:
+            self.clear()
         if items:
             for item in items:
                 self.put(item)
@@ -86,7 +87,7 @@ class RedisQueue(object):
     def task_done(self, item, force=False):
         if item is not None:
             tid, sname, priority, times, args, kwargs, sid = item
-            _print('', tid=tid, sid=sid, sname=sname, priority=priority, times=times, args=str(args), kwargs=str(kwargs), txt=None)
+            _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
             self.rc.hdel('pholcus-state', sid)
         if RedisQueue.conditions[self.tube]['unfinished_tasks'] <= 0:
             # raise ValueError('task_done() called too many times')
@@ -110,26 +111,29 @@ class RedisQueue(object):
         RedisQueue.conditions[self.tube]['mutex'].release()
 
     def traversal(self, skip=0, limit=10):
-        weight = copy.deepcopy(RedisQueue.conditions[self.tube]['weight'])
-        weight = list(set(weight))
-        weight.sort()
+        tubes = [one for one in self.rc.keys() if one.startswith(self.tube)]
+        tubes.sort(reverse=True)
         result = []
         start = skip
         end = skip + limit - 1
-        for w in weight:
-            for item in self.rc.lrange('-'.join([str(self.tube), str(w)]), start, end):
+        flag = False
+        for tube in tubes:
+            for item in self.rc.lrange(tube, start, end):
                 item = pickle.loads(item)
-                item['status_num'] = self.rc.hget('pholcus-state', item['sid'], 3)
+                item['status_num'] = self.rc.hget('pholcus-state', item['sid']) or 3
                 if len(result) + skip > DESCRIBE['READY']:
                     item['status_desc'] = DESCRIBE.get(item['status_num'])
                 else:
                     item['status_desc'] = 'ready'
                 result.append(item)
                 if len(result) == limit:
+                    flag = True
                     break
             else:
                 start = 0
                 end = limit - len(result) - 1
+            if flag:
+                break
         return result
 
     def __repr__(self):
