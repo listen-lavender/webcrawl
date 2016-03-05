@@ -29,7 +29,7 @@ except:
 
 _print, logger = logprint(modulename(__file__), modulepath(__file__))
 
-DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETRY'}
+DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETRY', 5:'ABANDONED'}
 
 class RedisQueue(object):
     conditions = {}
@@ -72,8 +72,13 @@ class RedisQueue(object):
         if item:
             item = item[-1]
             item = pickle.loads(item)
-            self.rc.hset('pholcus-state', item['sid'], 3)
-            return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
+            if self.rc.hget('pholcus-state', item['sid']) == 5:
+                self.rc.hdel('pholcus-state', item['sid'])
+                _print('', tid=item['tid'], sid=item['sid'], type='ABANDONED', status=2, sname='', priority=item['priority'], times=item['times'], args='(%s)' % ', '.join([str(one) for one in item['args']]), kwargs=json.dumps(item['kwargs'], ensure_ascii=False), txt=None)
+                return None
+            else:
+                self.rc.hset('pholcus-state', item['sid'], 3)
+                return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
         else:
             return None
 
@@ -109,6 +114,16 @@ class RedisQueue(object):
         RedisQueue.conditions[self.tube]['weight'].extend(weight)
         RedisQueue.conditions[self.tube]['weight'].sort()
         RedisQueue.conditions[self.tube]['mutex'].release()
+
+    def total(self):
+        total = 0
+        for one in self.rc.keys():
+            if one.startswith(self.tube):
+                total += self.rc.llen(one)
+        return total
+
+    def abandon(self, sid):
+        self.rc.hset('pholcus-state', sid, 5)
 
     def traversal(self, skip=0, limit=10):
         tubes = [one for one in self.rc.keys() if one.startswith(self.tube)]

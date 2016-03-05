@@ -259,7 +259,7 @@ def handleExcept(workqueue, method, args, kwargs, priority, methodId, times, tid
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
         txt = ','.join(err_messages)
-        _print('', tid=tid, sid=sid, type=count, status=0, sname=method.__name__, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
+        _print('', tid=tid, sid=sid, type=count.upper(), status=0, sname=method.__name__, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
 
 
 def geventwork(workqueue):
