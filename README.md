@@ -20,7 +20,7 @@ It is a simple tool for coder to develop executable .py file of grabbing web dat
 ```
  |-------put ---------- get             insert   insert
  |       /                \                |        |
- |     WAIT---READY--- RUNNING --------COMPLETED    |
+ |     WAIT---[ready]--- RUNNING --------COMPLETED    |
  |                         |                        |
  |                         |                        |
 RETRY----------------------|----------------------ERROR
@@ -29,9 +29,10 @@ RETRY----------------------|----------------------ERROR
  |__________________________________________________|
 
  WAIT     : 2
- READY    : 3
- RUNNING  : 4
- RETRY    : 5
+ RUNNING  : 3
+ RETRY    : 4
+ ABANDONED: 5
  COMPLETED: 1
  ERROR    : 0
+ ready   - 10
 ```
