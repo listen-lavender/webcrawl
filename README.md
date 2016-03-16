@@ -47,3 +47,21 @@ RETRY----------------------|----------------------ERROR
  ERROR    : 0
  ready   - 10
 ```
+
+# Getting started
+
+No example now.
+
+## Installation
+
+To install Requests, simply:
+
+````bash
+
+    $ pip install dbskit
+    ✨🍰✨
+````
+
+## Discussion and support
+
+Report bugs on the *GitHub issue tracker <https://github.com/listen-lavender/webcrawl/issues*. 
