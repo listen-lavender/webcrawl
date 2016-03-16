@@ -137,7 +137,7 @@ class RedisQueue(object):
                 item = pickle.loads(item)
                 item['status_num'] = self.rc.hget('pholcus-state', item['sid']) or 3
                 if len(result) + skip > DESCRIBE['READY']:
-                    item['status_desc'] = DESCRIBE.get(item['status_num'])
+                    item['status_desc'] = DESCRIBE.get(int(item['status_num']))
                 else:
                     item['status_desc'] = 'ready'
                 result.append(item)
