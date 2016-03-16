@@ -279,7 +279,7 @@ def parturl(url):
     routeparas = tuple(routeparas.split('/'))
     return routeparas, queryparas
 
-def ensureurl(refurl, objurl):
+def urljoin(refurl, objurl):
     """
     >>> ensureurl('http://www.homeinns.com/hotel', 'http://www.homeinns.com/beijing')
     'http://www.homeinns.com/beijing'
@@ -297,6 +297,8 @@ def ensureurl(refurl, objurl):
         return ''.join([refurl[:refurl.index('/')].replace('{$$}', '//'), objurl])
     else:
         return '/'.join([refurl[:refurl.rindex('/')], objurl])
+
+ensureurl = urljoin
 
 if __name__ == '__main__':
     print 'start...'

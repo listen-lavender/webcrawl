@@ -52,31 +52,5 @@ def _cu(string, encoding='utf8'):
         return unicode(string)
 
 
-def strQ2B(ustring):
-    rstring = ""
-    if isinstance(ustring, str):
-        ustring = _cu(ustring)
-    for uchar in ustring:
-        inside_code = ord(uchar)
-        if inside_code == 0x3000:
-            inside_code = 0x0020
-        else:
-            inside_code -= 0xfee0
-        if inside_code < 0x0020 or inside_code > 0x7e:
-            rstring += uchar
-        else:
-            rstring += unichr(inside_code)
-    return rstring
-
-
-def isdtiformat(dtistr, dtifmt):
-    dtistr = dtistr or ''
-    dtifmt = dtifmt or ''
-    try:
-        time.strptime(dtistr, dtifmt)
-        return True
-    except:
-        return False
-
 if __name__ == '__main__':
     pass
