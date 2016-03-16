@@ -58,7 +58,7 @@ To install webcrawl, simply:
 
 ````bash
 
-    $ pip install dbskit
+    $ pip install webcrawl
     ✨🍰✨
 ````
 
