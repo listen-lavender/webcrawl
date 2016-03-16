@@ -54,7 +54,7 @@ No example now.
 
 ## Installation
 
-To install Requests, simply:
+To install webcrawl, simply:
 
 ````bash
 
