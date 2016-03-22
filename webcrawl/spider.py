@@ -10,7 +10,7 @@ import threading
 from threading import Thread
 
 
-from work import Workflows
+from task import Workflows
 
 WORKNUM = 30
 QUEUETYPE = 'P'
