@@ -18,7 +18,7 @@ from lxml import etree as ET
 from lxml import html as HT
 from character import unicode2utf8
 from . import MyLocal
-from exception import URLFailureException, MarktypeError, FormatError
+from exception import URLFailureException, MarktypeError, FormatError, ArgumentError
 
 try:
     import Image
@@ -187,9 +187,11 @@ def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_red
 
 
 @byProxy
-def requPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None, browse=None):
+def requPost(url, data=None, files=None, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None, browse=None):
     """
     """
+    if data is None and files is None:
+        raise ArgumentError()
     if browse is not None:
         package = {'load_images': browse.load_images, 'method': 'POST'}
         package['url'] = url
@@ -213,10 +215,10 @@ def requPost(url, data, headers=None, cookies=None, proxies=None, timeout=10, al
         content = unicode2utf8(json.loads(content.decode('utf-8')))
         r = Fakeresponse(content['url'], content['status_code'], content['content'] or content['error'], r.content.decode('utf-8'), content['headers'], content['cookies'], js_result=content['js_result'])
     elif s is None:
-        r = requests.post(url, data=data, headers=headers, cookies=cookies,
+        r = requests.post(url, data=data, files=files, headers=headers, cookies=cookies,
                           proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     else:
-        r = s.post(url, data=data, headers=headers, cookies=cookies,
+        r = s.post(url, data=data, files=files, headers=headers, cookies=cookies,
                    proxies=proxies, timeout=timeout, allow_redirects=allow_redirects)
     return requformat(r, coding, dirtys, myfilter, format, filepath)
 

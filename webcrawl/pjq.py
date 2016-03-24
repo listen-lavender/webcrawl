@@ -54,11 +54,11 @@ class RedisQueue(object):
         return str(ObjectId())
 
     def put(self, item):
-        priority, methodId, times, args, kwargs, tid = item
+        priority, methodId, methodName, times, args, kwargs, tid = item
         # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
         sid = self.sid()
-        self.rc.lpush('-'.join([str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodId': methodId, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
+        self.rc.lpush('-'.join([str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodId': methodId, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
         if times == 0:
             self.rc.hset('pholcus-state', sid, 2)
         else:
@@ -78,7 +78,7 @@ class RedisQueue(object):
                 return None
             else:
                 self.rc.hset('pholcus-state', item['sid'], 3)
-                return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
+                return (item['priority'], item['methodId'], item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
         else:
             return None
 
@@ -106,8 +106,9 @@ class RedisQueue(object):
         RedisQueue.conditions[self.tube]['event'].wait()
 
     def clear(self):
-        for one in [one for one in self.rc.scan()[-1] if one.startswith('%s' % self.tube)]:
-            self.rc.delete(one)
+        for one in self.rc.keys():
+            if one.startswith(self.tube):
+                self.rc.delete(one)
 
     def rank(self, weight):
         RedisQueue.conditions[self.tube]['mutex'].acquire()
@@ -127,7 +128,7 @@ class RedisQueue(object):
 
     def traversal(self, skip=0, limit=10):
         tubes = [one for one in self.rc.keys() if one.startswith(self.tube)]
-        tubes.sort(reverse=True)
+        tubes.sort()
         result = []
         start = skip
         end = skip + limit - 1
@@ -181,8 +182,8 @@ class BeanstalkdQueue(object):
                 self.put(item)
 
     def put(self, item):
-        priority, methodId, times, args, kwargs, tid = item
-        self.bc.put(pickle.dumps({'priority': priority, 'methodId': methodId,
+        priority, methodId, methodName, times, args, kwargs, tid = item
+        self.bc.put(pickle.dumps({'priority': priority, 'methodId': methodId, 'methodName':methodName,
                                 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid}), priority=priority)
         BeanstalkdQueue.conditions[self.tube]['unfinished_tasks'] += 1
         BeanstalkdQueue.conditions[self.tube]['event'].clear()
@@ -192,7 +193,7 @@ class BeanstalkdQueue(object):
         if item:
             item.delete()
             item = pickle.loads(item.body)
-            return (item['priority'], item['methodId'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), None
+            return (item['priority'], item['methodId'], item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), None
         else:
             return None
 

@@ -78,6 +78,9 @@ TIMELIMIT = 0
 
 _continuous = True
 
+def callpath(fun):
+    return '.'.join([str(fun.clspath), fun.__name__])
+
 
 def initflow(which):
     def wrap(fun):
@@ -212,7 +215,7 @@ class Nevertimeout(object):
         pass
 
 
-def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, times, tid):
+def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, methodName, times, tid):
     index = result.next()
     if index and times == 0:
         if type(method.index) == int:
@@ -226,7 +229,7 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, tim
                 kwargs, **{method.index: index})
         else:
             raise "Incorrect arguments."
-        workqueue.put((priority, methodId, 0, indexargs, indexkwargs, tid))
+        workqueue.put((priority, methodId, methodName, 0, indexargs, indexkwargs, tid))
 
 
 def handleNextStore(workqueue, retvar, method, tid, hasnext=False, hasstore=False):
@@ -234,32 +237,32 @@ def handleNextStore(workqueue, retvar, method, tid, hasnext=False, hasstore=Fals
         pass
     elif type(retvar) == dict:
         hasnext and workqueue.put(
-            (method.next.priority, id(method.next), 0, (), retvar, tid))
+            (method.next.priority, id(method.next), callpath(method.next), 0, (), retvar, tid))
         hasstore and workqueue.put(
-            (method.store.priority, id(method.store), 0, (), {'obj': retvar['obj']}, tid))
+            (method.store.priority, id(method.store), callpath(method.store), 0, (), {'obj': retvar['obj']}, tid))
     elif type(retvar) == tuple:
         hasnext and workqueue.put(
-            (method.next.priority, id(method.next), 0, retvar, {}, tid))
+            (method.next.priority, id(method.next), callpath(method.next), 0, retvar, {}, tid))
         hasstore and workqueue.put(
-            (method.store.priority, id(method.store), 0, (retvar[0],), {}, tid))
+            (method.store.priority, id(method.store), callpath(method.store), 0, (retvar[0],), {}, tid))
     else:
         hasnext and workqueue.put(
-            (method.next.priority, id(method.next), 0, (retvar,), {}, tid))
+            (method.next.priority, id(method.next), callpath(method.next), 0, (retvar,), {}, tid))
         hasstore and workqueue.put(
-            (method.store.priority, id(method.store), 0, (retvar,), {}, tid))
+            (method.store.priority, id(method.store), callpath(method.store), 0, (retvar,), {}, tid))
         # raise "Incorrect result for next function."
 
 
-def handleExcept(workqueue, method, args, kwargs, priority, methodId, times, tid, sid, count='fail'):
+def handleExcept(workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, count='fail'):
     if times < method.retry:
         times = times + 1
-        workqueue.put((priority, methodId, times, args, kwargs, tid))
+        workqueue.put((priority, methodId, methodName, times, args, kwargs, tid))
     else:
         setattr(method, count, getattr(method, count)+1)
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
         txt = ','.join(err_messages)
-        _print('', tid=tid, sid=sid, type=count.upper(), status=0, sname=method.__name__, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
+        _print('', tid=tid, sid=sid, type=count.upper(), status=0, sname=methodName, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
 
 
 def geventwork(workqueue):
@@ -272,7 +275,7 @@ def geventwork(workqueue):
             if item is None:
                 continue
             stxt, sid = item
-            priority, methodId, times, args, kwargs, tid = stxt
+            priority, methodId, methodName, times, args, kwargs, tid = stxt
             method = ctypes.cast(methodId, ctypes.py_object).value
             try:
                 if method.timelimit > 0:
@@ -284,29 +287,29 @@ def geventwork(workqueue):
                 elif isinstance(result, types.GeneratorType):
                     try:
                         hasattr(method, 'index') and handleIndex(
-                            workqueue, result, method, args, kwargs, priority, methodId, times, tid)
+                            workqueue, result, method, args, kwargs, priority, methodId, methodName, times, tid)
                         for retvar in result:
                             handleNextStore(
                                 workqueue, retvar, method, tid, hasattr(method, 'next'), hasattr(method, 'store'))
                         method.succ = method.succ + 1
                     except TimeoutError:
                         handleExcept(
-                            workqueue, method, args, kwargs, priority, methodId, times, tid, sid, 'timeout')
+                            workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, 'timeout')
                     except:
                         handleExcept(
-                            workqueue, method, args, kwargs, priority, methodId, times, tid, sid, 'fail')
+                            workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, 'fail')
                 else:
                     handleNextStore(
                         workqueue, result, method, tid, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
                 handleExcept(
-                    workqueue, method, args, kwargs, priority, methodId, times, tid, sid, 'timeout')
+                    workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, 'timeout')
             except:
                 handleExcept(
-                    workqueue, method, args, kwargs, priority, methodId, times, tid, sid, 'fail')
+                    workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, 'fail')
             finally:
-                workqueue.task_done((tid, method.__name__, priority, times, args, kwargs, sid))
+                workqueue.task_done((tid, methodName, priority, times, args, kwargs, sid))
                 timer.cancel()
                 del timer
 
@@ -426,7 +429,9 @@ class Workflows(object):
             b.fail = 0
             b.timeout = 0
             hasattr(p, 'index') and setattr(b, 'index', p.index)
+            setattr(b, 'clspath', str(self))
             hasattr(p, 'store') and setattr(b, 'store', p.store)
+            hasattr(p, 'store') and setattr(b.store, 'clspath', str(self))
             b.retry = (hasattr(p, 'retry') and p.retry) or RETRY
             b.timelimit = (hasattr(p, 'timelimit') and p.timelimit) or TIMELIMIT
             b.priority = (hasattr(p, 'priority') and p.priority) or None
@@ -488,7 +493,7 @@ class Workflows(object):
             except:
                 print 'Flow %s has no %d steps.' % (flow, step)
             else:
-                self.queue.put((it.priority, id(it), 0, args, kwargs, str(self.tid)))
+                self.queue.put((it.priority, id(it), callpath(it), 0, args, kwargs, str(self.tid)))
                 for worker in self.workers:
                     if self.__worktype == 'COROUTINE':
                         gevent.spawn(worker)
@@ -523,7 +528,11 @@ class Workflows(object):
 
     def task(self, weight, section, tid, *args, **kwargs):
         self.queue.rank(weight)
-        self.queue.put((section.priority, id(section), 0, args, kwargs, str(tid)))
+        self.queue.put((section.priority, id(section), callpath(section), 0, args, kwargs, str(tid)))
+
+    def __str__(self):
+        desc = object.__str__(self)
+        return desc.replace("<", "").split(" ")[0]
 
     def __del__(self):
         if self.queue is not None:
