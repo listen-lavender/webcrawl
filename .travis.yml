@@ -1,0 +1,26 @@
+language: python
+python:
+  - "2.7"
+services:
+  - redis-server
+  - beanstalkd-server
+
+# command to install dependencies
+install: 
+  - pip install requests
+  - pip install lxml
+  - pip install gitpython
+  - pip install gitdb
+  - pip install chardet
+  - pip install PIL
+  - pip install gevent
+  - pip install pycrypto
+  - pip install redis
+  - pip install beanstalkc
+  - pip install kokolog
+
+# command to run tests
+script: 
+  - python setup.py install
+  - cd webcrawl/test
+  - python run.py
