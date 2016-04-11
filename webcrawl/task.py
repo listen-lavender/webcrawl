@@ -15,8 +15,10 @@ from . import MyLocal
 MTID = threading._get_ident()  # id of main thread
 from gevent import monkey, Timeout
 
-
-from pjq import RedisQueue, BeanstalkdQueue, LocalQueue
+from queue.mongo import Queue as MongoQueue
+from queue.redis import Queue as RedisQueue
+from queue.beanstalkd import Queue as BeanstalkdQueue
+from queue.local import Queue as LocalQueue
 from exception import TimeoutError
 
 
