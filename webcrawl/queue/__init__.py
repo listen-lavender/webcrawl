@@ -1,15 +1,10 @@
 #!/usr/bin/python
 # coding=utf8
 
-__import__('pkg_resources').declare_namespace(__name__)
-__version__ = '1.0.3'
-__author__ = 'hk'
+import uuid
 
-class MyLocal(object):
+def _id():
+    mac = uuid.UUID(int = uuid.getnode()).hex[-12:]  
+    return ":".join([mac[e:e+2] for e in range(0,11,2)])
 
-    def __init__(self, **kwargs):
-        # self.__dict__ = dict(self.__dict__, **kwargs)
-        self.__dict__.update(**kwargs)
-
-    def update(self, **kwargs):
-        self.__dict__.update(**kwargs)
+MACADDRESS = _id()

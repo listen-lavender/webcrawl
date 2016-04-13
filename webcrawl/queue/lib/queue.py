@@ -43,7 +43,6 @@ class Queue(object):
         self.unfinished_tasks = 0
 
     def task_done(self):
-        print '==========='
         """Indicate that a formerly enqueued task is complete.
 
         Used by Queue consumer threads.  For each get() used to fetch a task,

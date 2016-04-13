@@ -9,6 +9,7 @@ import cPickle as pickle
 from bson import ObjectId
 
 from character import unicode2utf8
+from . import MACADDRESS
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -48,12 +49,17 @@ class Queue(object):
             for item in items:
                 self.put(item)
 
-    def sid(self):
-        return str(ObjectId())
+    def funid(self, methodName, methodId=None):
+        if methodId is None:
+            return self.mc['%s-funid' % self.tube].find_one({'methodName':'%s-%s' % (MACADDRESS, methodName)})['methodId']
+        else:
+            self.mc['%s-funid' % self.tube].update({'methodName':'%s-%s' % (MACADDRESS, methodName)}, {'$set':{'methodId':methodId, 'methodName':'%s-%s' % (MACADDRESS, methodName)}}, upsert=True)
 
     def put(self, item):
-        priority, methodId, methodName, times, args, kwargs, tid = item
-        self.mc[self.tube].insert({'priority':priority, 'methodId':methodId, 'methodName':methodName, 'status':2, 'times':times, 'deny':[], 'tid':tid, 'txt':pickle.dumps({'priority': priority, 'methodId': methodId, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid})})
+        priority, methodName, times, args, kwargs, tid = item
+        sid = ObjectId()
+        txt = pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid})
+        self.mc[self.tube].insert({'_id':sid, 'priority':priority, 'methodName':methodName, 'status':2, 'times':times, 'deny':[], 'tid':tid, 'txt':txt})
         Queue.conditions[self.tube]['event'].clear()
 
     def get(self, block=True, timeout=0):
@@ -67,7 +73,7 @@ class Queue(object):
         if item:
             item = item['txt']
             item = pickle.loads(item)
-            return (item['priority'], item['methodId'], item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), str(item['_id'])
+            return (item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), str(item['_id'])
         else:
             return None
 
@@ -105,6 +111,9 @@ class Queue(object):
     def __repr__(self):
         return "<" + str(self.__class__).replace(" ", "").replace("'", "").split('.')[-1]
 
+    def collect(self):
+        if self.tube in Queue.conditions:
+            del Queue.conditions[self.tube]
 
     def __del__(self):
         del self.mc

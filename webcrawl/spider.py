@@ -47,7 +47,7 @@ class SpiderOrigin(Workflows):
             while True:
                 if hasattr(it, 'store'):
                     try:
-                        it.store(None, forcexe=True)
+                        it.store(None, maxsize=0)
                     except:
                         t, v, b = sys.exc_info()
                         err_messages = traceback.format_exception(t, v, b)

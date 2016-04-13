@@ -13,7 +13,7 @@ import threading
 import urlparse
 import time
 
-from Queue import Queue
+from queue.lib.queue import Queue
 from lxml import etree as ET
 from lxml import html as HT
 from character import unicode2utf8
@@ -153,7 +153,7 @@ def requformat(r, coding, dirtys, myfilter, format, filepath):
 
 
 @byProxy
-def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None, browse=None):
+def get(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None, browse=None):
     """
     """
     if browse is not None:
@@ -187,7 +187,7 @@ def requGet(url, headers=None, cookies=None, proxies=None, timeout=10, allow_red
 
 
 @byProxy
-def requPost(url, data=None, files=None, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None, browse=None):
+def post(url, data=None, files=None, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None, browse=None):
     """
     """
     if data is None and files is None:
@@ -224,7 +224,7 @@ def requPost(url, data=None, files=None, headers=None, cookies=None, proxies=Non
 
 
 @byProxy
-def requHead(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
+def head(url, headers=None, cookies=None, proxies=None, timeout=10, allow_redirects=True, coding='utf-8', dirtys=[], myfilter=contentFilter, format='ORIGIN', filepath=None, s=None):
     """
     """
     if s is None:
@@ -236,7 +236,7 @@ def requHead(url, headers=None, cookies=None, proxies=None, timeout=10, allow_re
     return requformat(r, coding, dirtys, myfilter, format, filepath)
 
 
-def requImg(url, tofile=None):
+def downloadImg(url, tofile=None):
     """
     """
     r = urllib2.Request(url)

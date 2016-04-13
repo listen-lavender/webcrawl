@@ -9,6 +9,7 @@ import cPickle as pickle
 from bson import ObjectId
 
 from character import unicode2utf8
+from . import MACADDRESS
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -48,15 +49,21 @@ class Queue(object):
             for item in items:
                 self.put(item)
 
+    def funid(self, methodName, methodId=None):
+        if methodId is None:
+            return self.rc.hget('%s-funid' % self.tube, '%s-%s' % (MACADDRESS, methodName))
+        else:
+            self.rc.hset('%s-funid' % self.tube, '%s-%s' % (MACADDRESS, methodName), methodId)
+
     def sid(self):
         return str(ObjectId())
 
     def put(self, item):
-        priority, methodId, methodName, times, args, kwargs, tid = item
+        priority, methodName, times, args, kwargs, tid = item
         # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
         sid = self.sid()
-        self.rc.lpush('-'.join([str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodId': methodId, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
+        self.rc.lpush('-'.join([str(self.tube), str(priority)]), pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
         if times == 0:
             self.rc.hset('pholcus-state', sid, 2)
         else:
@@ -76,7 +83,7 @@ class Queue(object):
                 return None
             else:
                 self.rc.hset('pholcus-state', item['sid'], 3)
-                return (item['priority'], item['methodId'], item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
+                return (item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
         else:
             return None
 

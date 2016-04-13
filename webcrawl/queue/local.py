@@ -10,6 +10,7 @@ from lib import queue
 threading.queue = queue
 
 from character import unicode2utf8
+from . import MACADDRESS
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -31,11 +32,11 @@ _print, logger = logprint(modulename(__file__), modulepath(__file__))
 DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETRY', 5:'ABANDONED'}
 
 
-# class LocalQueue(threading.queue.Queue):
+# class Queue(threading.queue.Queue):
 
 #     def __new__(cls):
 #         return threading.queue.Queue.__new__(cls)
-def LocalQueue():
+def Queue():
 
     def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
         self.is_patch = not 'join' in dir(threading.queue.Queue)
@@ -57,6 +58,12 @@ def LocalQueue():
 
         if self.is_patch and self.unfinished_tasks:
             self._cond.clear()
+
+    def funid(self, methodName, methodId=None):
+        if methodId is None:
+            return self.funids['%s-%s' % (MACADDRESS, methodName)]
+        else:
+            self.funids['%s-%s' % (MACADDRESS, methodName)] = methodId
 
     def _init(self, maxsize):
         if self.items:
@@ -110,7 +117,10 @@ def LocalQueue():
     def collect(self):
         pass
 
-    return type('PriorityQueue', (threading.queue.Queue, ), {'__init__':__init__, '_init':_init, '_put':_put, '_get':_get, 'task_done':task_done, 'join':join, 'rank':rank, 'collect':collect})
+    PriorityQueue = type('PriorityQueue', (threading.queue.Queue, ), {'__init__':__init__, '_init':_init, '_put':_put, '_get':_get, 'task_done':task_done, 'join':join, 'rank':rank, 'collect':collect})
+    PriorityQueue.funids = {}
+
+    return PriorityQueue
 
 
 if __name__ == '__main__':

@@ -7,6 +7,7 @@ import threading
 import cPickle as pickle
 
 from character import unicode2utf8
+from . import MACADDRESS
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -30,6 +31,7 @@ DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETR
 
 class Queue(object):
     conditions = {}
+    funids = {}
 
     def __init__(self, host='localhost', port=11300, tube='default', timeout=30, items=None, unfinished_tasks=None):
         self.bc = beanstalkc.Connection(host, port, connect_timeout=timeout)
@@ -45,6 +47,12 @@ class Queue(object):
         if items:
             for item in items:
                 self.put(item)
+
+    def funid(self, methodName, methodId=None):
+        if methodId is None:
+            return Queue.funids['%s-%s' % (MACADDRESS, methodName)]
+        else:
+            Queue.funids['%s-%s' % (MACADDRESS, methodName)] = methodId
 
     def put(self, item):
         priority, methodId, methodName, times, args, kwargs, tid = item

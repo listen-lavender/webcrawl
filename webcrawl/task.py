@@ -217,7 +217,7 @@ class Nevertimeout(object):
         pass
 
 
-def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, methodName, times, tid):
+def handleIndex(workqueue, result, method, args, kwargs, priority, methodName, times, tid):
     index = result.next()
     if index and times == 0:
         if type(method.index) == int:
@@ -231,7 +231,7 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, methodId, met
                 kwargs, **{method.index: index})
         else:
             raise "Incorrect arguments."
-        workqueue.put((priority, methodId, methodName, 0, indexargs, indexkwargs, tid))
+        workqueue.put((priority, methodName, 0, indexargs, indexkwargs, tid))
 
 
 def handleNextStore(workqueue, retvar, method, tid, hasnext=False, hasstore=False):
@@ -255,10 +255,10 @@ def handleNextStore(workqueue, retvar, method, tid, hasnext=False, hasstore=Fals
         # raise "Incorrect result for next function."
 
 
-def handleExcept(workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, count='fail'):
+def handleExcept(workqueue, method, args, kwargs, priority, methodName, times, tid, sid, count='fail'):
     if times < method.retry:
         times = times + 1
-        workqueue.put((priority, methodId, methodName, times, args, kwargs, tid))
+        workqueue.put((priority, methodName, times, args, kwargs, tid))
     else:
         setattr(method, count, getattr(method, count)+1)
         t, v, b = sys.exc_info()
@@ -289,27 +289,27 @@ def geventwork(workqueue):
                 elif isinstance(result, types.GeneratorType):
                     try:
                         hasattr(method, 'index') and handleIndex(
-                            workqueue, result, method, args, kwargs, priority, methodId, methodName, times, tid)
+                            workqueue, result, method, args, kwargs, priority, methodName, times, tid)
                         for retvar in result:
                             handleNextStore(
                                 workqueue, retvar, method, tid, hasattr(method, 'next'), hasattr(method, 'store'))
                         method.succ = method.succ + 1
                     except TimeoutError:
                         handleExcept(
-                            workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, 'timeout')
+                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, 'timeout')
                     except:
                         handleExcept(
-                            workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, 'fail')
+                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, 'fail')
                 else:
                     handleNextStore(
                         workqueue, result, method, tid, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
                 handleExcept(
-                    workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, 'timeout')
+                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, 'timeout')
             except:
                 handleExcept(
-                    workqueue, method, args, kwargs, priority, methodId, methodName, times, tid, sid, 'fail')
+                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, 'fail')
             finally:
                 workqueue.task_done((tid, methodName, priority, times, args, kwargs, sid))
                 timer.cancel()
