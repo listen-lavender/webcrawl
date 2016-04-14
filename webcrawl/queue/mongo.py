@@ -8,7 +8,7 @@ import threading
 import cPickle as pickle
 from bson import ObjectId
 
-from character import unicode2utf8
+from ..character import unicode2utf8
 from . import MACADDRESS
 
 try:
@@ -63,7 +63,8 @@ class Queue(object):
         Queue.conditions[self.tube]['event'].clear()
 
     def get(self, block=True, timeout=0):
-        item = self.mc.runCommand({
+        print self.mc
+        item = self.mc.run_command({
             'findAndModify':self.tube,
             'query':{'deny':{'$ne':'localhost'}, 'tid':{'$nin':[], 'status':{'$in':[2, 4]}}},
             'sort':{'priority':1},
