@@ -6,8 +6,8 @@ import beanstalkc
 import threading
 import cPickle as pickle
 
-from character import unicode2utf8
-from . import MACADDRESS
+from ..character import unicode2utf8
+from . import fid
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -50,13 +50,13 @@ class Queue(object):
 
     def funid(self, methodName, methodId=None):
         if methodId is None:
-            return Queue.funids['%s-%s' % (MACADDRESS, methodName)]
+            return Queue.funids[fid(methodName)]
         else:
-            Queue.funids['%s-%s' % (MACADDRESS, methodName)] = methodId
+            Queue.funids[fid(methodName)] = methodId
 
     def put(self, item):
-        priority, methodId, methodName, times, args, kwargs, tid = item
-        self.bc.put(pickle.dumps({'priority': priority, 'methodId': methodId, 'methodName':methodName,
+        priority, methodName, times, args, kwargs, tid = item
+        self.bc.put(pickle.dumps({'priority': priority, 'methodName':methodName,
                                 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid}), priority=priority)
         Queue.conditions[self.tube]['unfinished_tasks'] += 1
         Queue.conditions[self.tube]['event'].clear()
@@ -66,7 +66,7 @@ class Queue(object):
         if item:
             item.delete()
             item = pickle.loads(item.body)
-            return (item['priority'], item['methodId'], item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), None
+            return (item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), None
         else:
             return None
 
@@ -89,7 +89,8 @@ class Queue(object):
 
     def clear(self):
         while not self.empty():
-            item = self.get(timeout=10)
+            item = self.bc.reserve(timeout=0)
+            item.delete()
             del item
 
     def rank(self, weight):

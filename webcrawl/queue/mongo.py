@@ -9,7 +9,7 @@ import cPickle as pickle
 from bson import ObjectId
 
 from ..character import unicode2utf8
-from . import MACADDRESS
+from . import fid
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -51,9 +51,9 @@ class Queue(object):
 
     def funid(self, methodName, methodId=None):
         if methodId is None:
-            return self.mc['%s-funid' % self.tube].find_one({'methodName':'%s-%s' % (MACADDRESS, methodName)})['methodId']
+            return self.mc['%s_funid' % self.tube].find_one({'methodName':fid(methodName)})['methodId']
         else:
-            self.mc['%s-funid' % self.tube].update({'methodName':'%s-%s' % (MACADDRESS, methodName)}, {'$set':{'methodId':methodId, 'methodName':'%s-%s' % (MACADDRESS, methodName)}}, upsert=True)
+            self.mc['%s_funid' % self.tube].update({'methodName':fid(methodName)}, {'$set':{'methodId':methodId, 'methodName':fid(methodName)}}, upsert=True)
 
     def put(self, item):
         priority, methodName, times, args, kwargs, tid = item
@@ -63,18 +63,12 @@ class Queue(object):
         Queue.conditions[self.tube]['event'].clear()
 
     def get(self, block=True, timeout=0):
-        print self.mc
-        item = self.mc.run_command({
-            'findAndModify':self.tube,
-            'query':{'deny':{'$ne':'localhost'}, 'tid':{'$nin':[], 'status':{'$in':[2, 4]}}},
-            'sort':{'priority':1},
-            'update':{'$set':{'status':3}},
-            'upsert':False
-        })
+        item = self.mc[self.tube].find_one_and_update({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[]}, 'status':{'$in':[2, 4]}}, {'$set':{'status':3}}, sort=[('priority', 1)])
         if item:
-            item = item['txt']
+            _id = str(item['_id'])
+            item = item['txt'].encode('utf-8')
             item = pickle.loads(item)
-            return (item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), str(item['_id'])
+            return (item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], _id)
         else:
             return None
 
@@ -97,6 +91,7 @@ class Queue(object):
 
     def clear(self):
         self.mc[self.tube].remove({})
+        self.mc['%s_funid' % self.tube].remove({})
 
     def total(self):
         total = self.mc[self.tube].find({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[], 'status':{'$in':[2, 4]}}}).count()
@@ -105,7 +100,7 @@ class Queue(object):
     def abandon(self, sid):
         self.mc[self.tube].update({'_id':ObjectId(sid)}, {'$set':{'status':5}})
 
-    def traversal(self, skip=0, limit=10):
+    def query(self, skip=0, limit=10):
         result = list(self.mc[self.tube].find({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[], 'status':{'$in':[2, 4]}}}, skip=skip, limit=limit))
         return result
 

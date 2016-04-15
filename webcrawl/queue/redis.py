@@ -3,13 +3,13 @@
 
 import json
 import heapq
-import redis
 import threading
 import cPickle as pickle
 from bson import ObjectId
 
-from character import unicode2utf8
-from . import MACADDRESS
+from .. import redis
+from ..character import unicode2utf8
+from . import fid
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -51,9 +51,9 @@ class Queue(object):
 
     def funid(self, methodName, methodId=None):
         if methodId is None:
-            return self.rc.hget('%s-funid' % self.tube, '%s-%s' % (MACADDRESS, methodName))
+            return self.rc.hget('%s_funid' % self.tube, fid(methodName))
         else:
-            self.rc.hset('%s-funid' % self.tube, '%s-%s' % (MACADDRESS, methodName), methodId)
+            self.rc.hset('%s_funid' % self.tube, fid(methodName), methodId)
 
     def sid(self):
         return str(ObjectId())
@@ -131,7 +131,7 @@ class Queue(object):
     def abandon(self, sid):
         self.rc.hset('pholcus-state', sid, 5)
 
-    def traversal(self, skip=0, limit=10):
+    def query(self, skip=0, limit=10):
         tubes = [one for one in self.rc.keys() if one.startswith(self.tube)]
         tubes.sort()
         result = []

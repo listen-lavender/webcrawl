@@ -9,8 +9,8 @@ from bson import ObjectId
 from lib import queue
 threading.queue = queue
 
-from character import unicode2utf8
-from . import MACADDRESS
+from ..character import unicode2utf8
+from . import fid
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -61,9 +61,9 @@ def Queue():
 
     def funid(self, methodName, methodId=None):
         if methodId is None:
-            return self.funids['%s-%s' % (MACADDRESS, methodName)]
+            return self.funids[fid(methodName)]
         else:
-            self.funids['%s-%s' % (MACADDRESS, methodName)] = methodId
+            self.funids[fid(methodName)] = methodId
 
     def _init(self, maxsize):
         if self.items:
@@ -117,7 +117,7 @@ def Queue():
     def collect(self):
         pass
 
-    PriorityQueue = type('PriorityQueue', (threading.queue.Queue, ), {'__init__':__init__, '_init':_init, '_put':_put, '_get':_get, 'task_done':task_done, 'join':join, 'rank':rank, 'collect':collect})
+    PriorityQueue = type('PriorityQueue', (threading.queue.Queue, ), {'__init__':__init__, '_init':_init, 'funid':funid, '_put':_put, '_get':_get, 'task_done':task_done, 'join':join, 'rank':rank, 'collect':collect})
     PriorityQueue.funids = {}
 
     return PriorityQueue
