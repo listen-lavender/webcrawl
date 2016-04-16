@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-
+import json
 import heapq
 import beanstalkc
 import threading
@@ -33,15 +33,15 @@ class Queue(object):
     conditions = {}
     funids = {}
 
-    def __init__(self, host='localhost', port=11300, tube='default', timeout=30, items=None, unfinished_tasks=None):
+    def __init__(self, host='localhost', port=11300, tube='', timeout=30, items=None, unfinished_tasks=None):
         self.bc = beanstalkc.Connection(host, port, connect_timeout=timeout)
-        self.tube = tube
+        self.tube = 'pholcus_task%s' % tube
         self.bc.use(self.tube)
         self.bc.watch(self.tube)
         if self.tube in Queue.conditions:
             pass
         else:
-            Queue.conditions[self.tube] = {'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event()}
+            Queue.conditions[self.tube] = {'event': threading.Event()}
             self.clear()
             Queue.conditions[self.tube]['event'].set()
         if items:
@@ -58,7 +58,6 @@ class Queue(object):
         priority, methodName, times, args, kwargs, tid = item
         self.bc.put(pickle.dumps({'priority': priority, 'methodName':methodName,
                                 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid}), priority=priority)
-        Queue.conditions[self.tube]['unfinished_tasks'] += 1
         Queue.conditions[self.tube]['event'].clear()
 
     def get(self, block=True, timeout=0):
@@ -77,10 +76,10 @@ class Queue(object):
         pass
 
     def task_done(self, item, force=False):
-        if Queue.conditions[self.tube]['unfinished_tasks'] <= 0:
-            raise ValueError('task_done() called too many times')
-        Queue.conditions[self.tube]['unfinished_tasks'] -= 1
-        if Queue.conditions[self.tube]['unfinished_tasks'] == 0 or force:
+        if item is not None:
+            tid, sname, priority, times, args, kwargs, sid = item
+            _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
+        if self.empty() or force:
             # if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()
 

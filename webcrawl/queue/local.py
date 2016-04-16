@@ -6,9 +6,8 @@ import heapq
 import threading
 import cPickle as pickle
 from bson import ObjectId
-from lib import queue
-threading.queue = queue
 
+import lib
 from ..character import unicode2utf8
 from . import fid
 
@@ -32,18 +31,18 @@ _print, logger = logprint(modulename(__file__), modulepath(__file__))
 DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETRY', 5:'ABANDONED'}
 
 
-# class Queue(threading.queue.Queue):
+# class Queue(lib.queue.Queue):
 
 #     def __new__(cls):
-#         return threading.queue.Queue.__new__(cls)
+#         return lib.queue.Queue.__new__(cls)
 def Queue():
 
     def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
-        self.is_patch = not 'join' in dir(threading.queue.Queue)
+        self.is_patch = not 'join' in dir(lib.queue.Queue)
         self.maxsize = maxsize or 0
         self.items = items
 
-        self.parent = threading.queue.Queue.__init__(self, maxsize)
+        self.parent = lib.queue.Queue.__init__(self, maxsize)
         if self.is_patch:
             from gevent.event import Event
             self._cond = Event()
@@ -78,9 +77,15 @@ def Queue():
             self._cond.clear()
 
     def _get(self, heappop=heapq.heappop):
-        return heappop(self.queue), None
+        item = list(heappop(self.queue))
+        item.insert(1, self.funid(item[1]))
+        item = tuple(item)
+        return item, None
 
     def task_done(self, item, force=False):
+        if item is not None:
+            tid, sname, priority, times, args, kwargs, sid = item
+            _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
         if self.is_patch:
             if self.unfinished_tasks <= 0:
                 raise ValueError('task_done() called too many times')
@@ -117,7 +122,8 @@ def Queue():
     def collect(self):
         pass
 
-    PriorityQueue = type('PriorityQueue', (threading.queue.Queue, ), {'__init__':__init__, '_init':_init, 'funid':funid, '_put':_put, '_get':_get, 'task_done':task_done, 'join':join, 'rank':rank, 'collect':collect})
+    PriorityQueue = type('PriorityQueue', (lib.queue.Queue, ), {'__init__':__init__, 
+        '_init':_init, 'funid':funid, '_put':_put, '_get':_get, 'task_done':task_done, 'join':join, 'rank':rank, 'collect':collect})
     PriorityQueue.funids = {}
 
     return PriorityQueue

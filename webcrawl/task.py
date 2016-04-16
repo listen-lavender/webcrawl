@@ -48,12 +48,17 @@ DataQueue = MyLocal(
             'host':'localhost',
             'port':6379,
             'db':0,
-            'tube':'pholcus-task',
+            'tube':'pholcus_task',
         },
         beanstalkd={
             'host':'localhost',
             'port':11300,
-            'tube':'pholcus-task',
+            'tube':'pholcus_task',
+        },
+        mongo={
+            'host':'localhost',
+            'port':27017,
+            'tube':'pholcus_task',
         }
     )
 
@@ -239,19 +244,19 @@ def handleNextStore(workqueue, retvar, method, tid, hasnext=False, hasstore=Fals
         pass
     elif type(retvar) == dict:
         hasnext and workqueue.put(
-            (method.next.priority, id(method.next), callpath(method.next), 0, (), retvar, tid))
+            (method.next.priority, callpath(method.next), 0, (), retvar, tid))
         hasstore and workqueue.put(
-            (method.store.priority, id(method.store), callpath(method.store), 0, (), {'obj': retvar['obj']}, tid))
+            (method.store.priority, callpath(method.store), 0, (), {'obj': retvar['obj']}, tid))
     elif type(retvar) == tuple:
         hasnext and workqueue.put(
-            (method.next.priority, id(method.next), callpath(method.next), 0, retvar, {}, tid))
+            (method.next.priority, callpath(method.next), 0, retvar, {}, tid))
         hasstore and workqueue.put(
-            (method.store.priority, id(method.store), callpath(method.store), 0, (retvar[0],), {}, tid))
+            (method.store.priority, callpath(method.store), 0, (retvar[0],), {}, tid))
     else:
         hasnext and workqueue.put(
-            (method.next.priority, id(method.next), callpath(method.next), 0, (retvar,), {}, tid))
+            (method.next.priority, callpath(method.next), 0, (retvar,), {}, tid))
         hasstore and workqueue.put(
-            (method.store.priority, id(method.store), callpath(method.store), 0, (retvar,), {}, tid))
+            (method.store.priority, callpath(method.store), 0, (retvar,), {}, tid))
         # raise "Incorrect result for next function."
 
 
@@ -372,16 +377,21 @@ class Workflows(object):
         if flow:
             weight = self.weight(flow)
             tube['tube'] = str(id(self))
-
+        self.queue = LocalQueue()()
         try:
             if self.__queuetype == 'P':
+                print '--------'
                 self.queue = LocalQueue()()
             elif self.__queuetype == 'B':
                 self.queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
-            else:
+            elif self.__queuetype == 'R':
                 self.queue = RedisQueue(weight=weight, **dict(DataQueue.redis, **tube))
+            elif self.__queuetype == 'M':
+                self.queue = MongoQueue(**dict(DataQueue.mongo, **tube))
+            else:
+                raise Exception('Error queue type.')
         except:
-            print 'Wrong type of queue, please choose P or B or start your beanstalkd service.'
+            print 'Wrong type of queue, please choose P(local queue), B(beanstalkd queue), R(redis queue), M(mongo queue) start your beanstalkd service.'
 
         global sleep
         if self.__worktype == 'COROUTINE':
@@ -392,9 +402,14 @@ class Workflows(object):
                 elif self.__queuetype == 'B':
                     worker = functools.partial(
                         geventwork, BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube)))
-                else:
+                elif self.__queuetype == 'R':
                     worker = functools.partial(
                         geventwork, RedisQueue(weight=weight, **dict(DataQueue.redis, **tube)))
+                elif self.__queuetype == 'M':
+                    worker = functools.partial(
+                        geventwork, MongoQueue(**dict(DataQueue.mongo, **tube)))
+                else:
+                    raise Exception('Error queue type.')
                 self.workers.append(worker)
         else:
             from time import sleep
@@ -403,8 +418,12 @@ class Workflows(object):
                     worker = Foreverworker(self.queue)
                 elif self.__queuetype == 'B':
                     worker = Foreverworker(BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube)))
-                else:
+                elif self.__queuetype == 'R':
                     worker = Foreverworker(RedisQueue(weight=weight, **dict(DataQueue.redis, **tube)))
+                elif self.__queuetype == 'M':
+                    worker = Foreverworker(MongoQueue(**dict(DataQueue.mongo, **tube)))
+                else:
+                    raise Exception('Error queue type.')
                 self.workers.append(worker)
 
     def tinder(self, flow):
@@ -497,9 +516,13 @@ class Workflows(object):
             else:
                 self.queue.put((it.priority, callpath(it), 0, args, kwargs, str(self.tid)))
                 self.queue.funid(callpath(it), id(it))
+                if hasattr(it, 'store'):
+                    self.queue.funid(callpath(it.store), id(it.store))
                 while hasattr(it, 'next'):
                     it = it.next
                     self.queue.funid(callpath(it), id(it))
+                    if hasattr(it, 'store'):
+                        self.queue.funid(callpath(it.store), id(it.store))
                 for worker in self.workers:
                     if self.__worktype == 'COROUTINE':
                         gevent.spawn(worker)
@@ -536,9 +559,13 @@ class Workflows(object):
         self.queue.rank(weight)
         it = section
         self.queue.funid(callpath(it), id(it))
+        if hasattr(it, 'store'):
+            self.queue.funid(callpath(it.store), id(it.store))
         while hasattr(it, 'next'):
             it = it.next
             self.queue.funid(callpath(it), id(it))
+            if hasattr(it, 'store'):
+                self.queue.funid(callpath(it.store), id(it.store))
         self.queue.put((section.priority, callpath(section), 0, args, kwargs, str(tid)))
 
     def __str__(self):

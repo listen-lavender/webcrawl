@@ -33,15 +33,15 @@ DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETR
 class Queue(object):
     conditions = {}
 
-    def __init__(self, host='localhost', port=27017, db='pholcus', tube='default', timeout=30, items=None, unfinished_tasks=None, init=True, weight=[]):
+    def __init__(self, host='localhost', port=27017, db='pholcus', tube='', timeout=30, items=None, unfinished_tasks=None, init=True):
         self.mc = pymongo.MongoClient(host='localhost', port=port)[db]
-        self.tube = tube
+        self.tube = 'task%s' % tube
         self.unfinished_tasks = 0
 
         if self.tube in Queue.conditions:
             pass
         else:
-            Queue.conditions[self.tube] = {'unfinished_tasks': unfinished_tasks or 0, 'event': threading.Event(), 'mutex':threading.Lock(), 'weight':weight}
+            Queue.conditions[self.tube] = {'event': threading.Event()}
             Queue.conditions[self.tube]['event'].set()
         if init:
             self.clear()
@@ -68,12 +68,12 @@ class Queue(object):
             _id = str(item['_id'])
             item = item['txt'].encode('utf-8')
             item = pickle.loads(item)
-            return (item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], _id)
+            return ((item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), _id)
         else:
             return None
 
     def empty(self):
-        return self.mc[self.tube].find({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[], 'status':{'$in':[2, 4]}}}).count() == 0
+        return self.mc[self.tube].find({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[]}, 'status':{'$in':[2, 4]}}).count() == 0
 
     def copy(self):
         pass
