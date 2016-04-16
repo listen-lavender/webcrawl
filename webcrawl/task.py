@@ -380,7 +380,6 @@ class Workflows(object):
         self.queue = LocalQueue()()
         try:
             if self.__queuetype == 'P':
-                print '--------'
                 self.queue = LocalQueue()()
             elif self.__queuetype == 'B':
                 self.queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
