@@ -60,16 +60,21 @@ class Queue(object):
         return str(ObjectId())
 
     def put(self, item):
-        priority, methodName, times, args, kwargs, tid = item
+        priority, methodName, times, args, kwargs, tid, sid = item
         # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
-        sid = self.sid()
-        self.rc.lpush('_'.join([self.tube, str(priority)]), pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
-        if times == 0:
-            self.rc.hset('pholcus_state', sid, 2)
+        exist = False
+        if sid is not None:
+            exist = self.rc.hget('pholcus_state', sid) is not None
         else:
-            self.rc.hset('pholcus_state', sid, 4)
-        Queue.conditions[self.tube]['event'].clear()
+            sid = str(ObjectId())
+        if not exist:
+            self.rc.lpush('_'.join([self.tube, str(priority)]), pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid}))
+            if times == 0:
+                self.rc.hset('pholcus_state', sid, 2)
+            else:
+                self.rc.hset('pholcus_state', sid, 4)
+            Queue.conditions[self.tube]['event'].clear()
 
     def get(self, block=True, timeout=0):
         # item = self.rc.zrangebyscore(self.tube, float('-inf'), float('+inf'), start=0, num=1)
@@ -83,7 +88,7 @@ class Queue(object):
                 return None
             else:
                 self.rc.hset('pholcus_state', item['sid'], 3)
-                return (item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), item['sid']
+                return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['sid']
         else:
             return None
 
@@ -96,7 +101,7 @@ class Queue(object):
 
     def task_done(self, item, force=False):
         if item is not None:
-            tid, sname, priority, times, args, kwargs, sid = item
+            args, kwargs, priority, sname, times, tid, sid = item
             _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
             self.rc.hdel('pholcus_state', sid)
         if self.empty() or force:

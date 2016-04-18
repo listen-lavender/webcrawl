@@ -80,11 +80,11 @@ def Queue():
         item = list(heappop(self.queue))
         item.insert(1, self.funid(item[1]))
         item = tuple(item)
-        return item, None
+        return item
 
     def task_done(self, item, force=False):
         if item is not None:
-            tid, sname, priority, times, args, kwargs, sid = item
+            args, kwargs, priority, sname, times, tid, sid = item
             _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
         if self.is_patch:
             if self.unfinished_tasks <= 0:

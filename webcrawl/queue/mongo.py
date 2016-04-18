@@ -56,19 +56,21 @@ class Queue(object):
             self.mc['%s_funid' % self.tube].update({'methodName':fid(methodName)}, {'$set':{'methodId':methodId, 'methodName':fid(methodName)}}, upsert=True)
 
     def put(self, item):
-        priority, methodName, times, args, kwargs, tid = item
-        sid = ObjectId()
+        priority, methodName, times, args, kwargs, tid, sid = item
+        sid = sid or str(ObjectId())
         txt = pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid})
-        self.mc[self.tube].insert({'_id':sid, 'priority':priority, 'methodName':methodName, 'status':2, 'times':times, 'deny':[], 'tid':tid, 'txt':txt})
-        Queue.conditions[self.tube]['event'].clear()
+        try:
+            self.mc[self.tube].insert({'_id':sid, 'priority':priority, 'methodName':methodName, 'status':2, 'times':times, 'deny':[], 'tid':tid, 'txt':txt}, continue_on_error=True)
+            Queue.conditions[self.tube]['event'].clear()
+        except:
+            pass
 
     def get(self, block=True, timeout=0):
         item = self.mc[self.tube].find_one_and_update({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[]}, 'status':{'$in':[2, 4]}}, {'$set':{'status':3}}, sort=[('priority', 1)])
         if item:
-            _id = str(item['_id'])
             item = item['txt'].encode('utf-8')
             item = pickle.loads(item)
-            return ((item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), _id)
+            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['_id']
         else:
             return None
 
@@ -80,7 +82,7 @@ class Queue(object):
 
     def task_done(self, item, force=False):
         if item is not None:
-            tid, sname, priority, times, args, kwargs, sid = item
+            args, kwargs, priority, sname, times, tid, sid = item
             _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
             self.mc[self.tube].update({'_id':ObjectId(sid)}, {'$set':{'status':1}})
         if self.empty() or force:

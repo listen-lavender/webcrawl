@@ -55,7 +55,7 @@ class Queue(object):
             Queue.funids[fid(methodName)] = methodId
 
     def put(self, item):
-        priority, methodName, times, args, kwargs, tid = item
+        priority, methodName, times, args, kwargs, tid, sid = item
         self.bc.put(pickle.dumps({'priority': priority, 'methodName':methodName,
                                 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid}), priority=priority)
         Queue.conditions[self.tube]['event'].clear()
@@ -65,7 +65,7 @@ class Queue(object):
         if item:
             item.delete()
             item = pickle.loads(item.body)
-            return (item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid']), None
+            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], None
         else:
             return None
 
@@ -77,7 +77,7 @@ class Queue(object):
 
     def task_done(self, item, force=False):
         if item is not None:
-            tid, sname, priority, times, args, kwargs, sid = item
+            args, kwargs, priority, sname, times, tid, sid = item
             _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
         if self.empty() or force:
             # if self.empty() or force:
