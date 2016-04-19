@@ -300,7 +300,8 @@ def handleExcept(workqueue, method, args, kwargs, priority, methodName, times, t
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
         txt = ','.join(err_messages)
-        _print('', tid=tid, sid=sid, type=count.upper(), status=0, sname=methodName, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
+        item = tid, sid, count.upper(), status, methodName, priority, times, args, kwargs, txt
+        workqueue.task_skip(item)
 
 
 def geventwork(workqueue):
