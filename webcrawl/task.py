@@ -236,12 +236,13 @@ class Nevertimeout(object):
 
 def generateId(method, args, kwargs, times):
     sid = ''
-    for key in method.unique:
+    for key in getattr(method, 'unique', []):
         if type(key) == int:
             sid += str(args[key])
         else:
             sid += str(kwargs[key])
-    sid = hashlib.md5('%s%s' % (sid, times)).hexdigest() if sid else None
+    sid = hashlib.md5('%s%s' % (sid, str(times))).hexdigest() if sid else None
+    print 'sid', sid
     return sid
 
 def handleIndex(workqueue, result, method, args, kwargs, priority, methodName, times, tid):
@@ -266,26 +267,26 @@ def handleNextStore(workqueue, retvar, method, tid, hasnext=False, hasstore=Fals
     if retvar is None:
         pass
     elif type(retvar) == dict:
-        sid = generateId(method.next, (), retvar, 0)
-        hasnext and workqueue.put(
-            (method.next.priority, callpath(method.next), 0, (), retvar, tid, sid))
-        sid = generateId(method.store, (), {'obj': retvar['obj']}, 0)
-        hasstore and workqueue.put(
-            (method.store.priority, callpath(method.store), 0, (), {'obj': retvar['obj']}, tid, sid))
+        if hasnext:
+            sid = generateId(method.next, (), retvar, 0)
+            workqueue.put((method.next.priority, callpath(method.next), 0, (), retvar, tid, sid))
+        if hasstore:
+            sid = generateId(method.store, (), {'obj': retvar['obj']}, 0)
+            workqueue.put((method.store.priority, callpath(method.store), 0, (), {'obj': retvar['obj']}, tid, sid))
     elif type(retvar) == tuple:
-        sid = generateId(method.next, retvar, {}, 0)
-        hasnext and workqueue.put(
-            (method.next.priority, callpath(method.next), 0, retvar, {}, tid, sid))
-        sid = generateId(method.store, retvar, {}, 0)
-        hasstore and workqueue.put(
-            (method.store.priority, callpath(method.store), 0, (retvar[0],), {}, tid, sid))
+        if hasnext:
+            sid = generateId(method.next, retvar, {}, 0)
+            workqueue.put((method.next.priority, callpath(method.next), 0, retvar, {}, tid, sid))
+        if hasstore:
+            sid = generateId(method.store, retvar, {}, 0)
+            workqueue.put((method.store.priority, callpath(method.store), 0, (retvar[0],), {}, tid, sid))
     else:
-        sid = generateId(method.next, (retvar,), {}, 0)
-        hasnext and workqueue.put(
-            (method.next.priority, callpath(method.next), 0, (retvar,), {}, tid, sid))
-        sid = generateId(method.store, (retvar,), {}, 0)
-        hasstore and workqueue.put(
-            (method.store.priority, callpath(method.store), 0, (retvar,), {}, tid, sid))
+        if hasnext:
+            sid = generateId(method.next, (retvar,), {}, 0)
+            workqueue.put((method.next.priority, callpath(method.next), 0, (retvar,), {}, tid, sid))
+        if hasstore:
+            sid = generateId(method.store, (retvar,), {}, 0)
+            workqueue.put((method.store.priority, callpath(method.store), 0, (retvar,), {}, tid, sid))
         # raise "Incorrect result for next function."
 
 
@@ -478,7 +479,7 @@ class Workflows(object):
             b.fail = 0
             b.timeout = 0
             hasattr(p, 'index') and setattr(b, 'index', p.index)
-            hasattr(p, 'unique') and setattr(b, 'unique', p.index)
+            hasattr(p, 'unique') and setattr(b, 'unique', p.unique)
             setattr(b, 'clspath', str(self))
             hasattr(p, 'store') and setattr(b, 'store', p.store)
             hasattr(p, 'store') and setattr(b.store, 'clspath', str(self))
@@ -543,7 +544,8 @@ class Workflows(object):
             except:
                 print 'Flow %s has no %d steps.' % (flow, step)
             else:
-                self.queue.put((it.priority, callpath(it), 0, args, kwargs, str(self.tid)))
+                sid = generateId(it, args, kwargs, 0)
+                self.queue.put((it.priority, callpath(it), 0, args, kwargs, str(self.tid), sid))
                 self.queue.funid(callpath(it), id(it))
                 if hasattr(it, 'store'):
                     self.queue.funid(callpath(it.store), id(it.store))
@@ -595,7 +597,8 @@ class Workflows(object):
             self.queue.funid(callpath(it), id(it))
             if hasattr(it, 'store'):
                 self.queue.funid(callpath(it.store), id(it.store))
-        self.queue.put((section.priority, callpath(section), 0, args, kwargs, str(tid)))
+        sid = generateId(it, args, kwargs, 0)
+        self.queue.put((section.priority, callpath(section), 0, args, kwargs, str(tid), sid))
 
     def __str__(self):
         desc = object.__str__(self)

@@ -68,9 +68,10 @@ class Queue(object):
     def get(self, block=True, timeout=0):
         item = self.mc[self.tube].find_one_and_update({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[]}, 'status':{'$in':[2, 4]}}, {'$set':{'status':3}}, sort=[('priority', 1)])
         if item:
+            _id = item['_id']
             item = item['txt'].encode('utf-8')
             item = pickle.loads(item)
-            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['_id']
+            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], _id
         else:
             return None
 
