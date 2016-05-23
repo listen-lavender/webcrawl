@@ -32,7 +32,7 @@ class Queue(object):
     conditions = {}
 
     def __init__(self, host='localhost', port=6379, db=0, tube='', timeout=30, items=None, unfinished_tasks=None, init=True, weight=[]):
-        self.rc = redis.StrictRedis(host='localhost', port=port, db=db)
+        self.rc = redis.StrictRedis(host=host, port=port, db=db)
         self.prefix = 'pholcus_task'
         self.tube = '%s%s' % (self.prefix, tube)
         self.unfinished_tasks = 0
@@ -55,10 +55,10 @@ class Queue(object):
             self.rc.hset('%s_funid' % self.tube, fid(methodName), methodId)
 
     def put(self, item):
-        priority, methodName, times, args, kwargs, tid, sid = item
+        priority, methodName, times, args, kwargs, tid, sid, version = item
         # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
-        self.rc.lpush('_'.join([self.tube, str(priority)]), pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid}))
+        self.rc.lpush('_'.join([self.tube, str(priority)]), pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid, 'version':version}))
         Queue.conditions[self.tube]['event'].clear()
 
     def get(self, block=True, timeout=0):
@@ -67,7 +67,7 @@ class Queue(object):
         if item:
             item = item[-1]
             item = pickle.loads(item)
-            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], None
+            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['sid'], item['version']
 
     def empty(self):
         total = sum([self.rc.llen(one) for one in ['_'.join([str(self.tube), str(one)]) for one in Queue.conditions[self.tube]['weight']]])

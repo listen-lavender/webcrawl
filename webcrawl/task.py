@@ -123,15 +123,11 @@ def unique(keys):
     return wrap
 
 
-def store(db=None, way=None, update=None, method=None):
+def store(db, way, update=None, method=None):
     def wrap(fun):
         if way is not None:
-            if db is None:
-                fun.store = way
-                fun.store.__name__ = way.__name__
-            else:
-                fun.store = functools.partial(db(way), update=update, method=method)
-                fun.store.__name__ = 'store' + way.im_self.__name__
+            fun.store = functools.partial(db(way), update=update, method=method)
+            fun.store.__name__ = 'store' + way.im_self.__name__
             fun.store.retry = RETRY
             fun.store.timelimit = TIMELIMIT
             fun.store.priority = 0
@@ -241,11 +237,10 @@ def generateId(method, args, kwargs, times):
             sid += str(args[key])
         else:
             sid += str(kwargs[key])
-    sid = hashlib.md5('%s%s' % (sid, str(times))).hexdigest() if sid else None
-    print 'sid', sid
+    sid = hashlib.md5('%s%s%s%s' % (str(getattr(method, 'aid', '')), str(getattr(method, 'sid', '')), sid, str(times))).hexdigest() if sid else None
     return sid
 
-def handleIndex(workqueue, result, method, args, kwargs, priority, methodName, times, tid):
+def handleIndex(workqueue, result, method, args, kwargs, priority, methodName, times, tid, version):
     index = result.next()
     if index and times == 0:
         if type(method.index) == int:
@@ -260,41 +255,41 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, methodName, t
         else:
             raise "Incorrect arguments."
         sid = generateId(method, args, kwargs, times)
-        workqueue.put((priority, methodName, 0, indexargs, indexkwargs, tid, sid))
+        workqueue.put((priority, methodName, 0, indexargs, indexkwargs, tid, sid, version))
 
 
-def handleNextStore(workqueue, retvar, method, tid, hasnext=False, hasstore=False):
+def handleNextStore(workqueue, retvar, method, tid, version, hasnext=False, hasstore=False):
     if retvar is None:
         pass
     elif type(retvar) == dict:
         if hasnext:
             sid = generateId(method.next, (), retvar, 0)
-            workqueue.put((method.next.priority, callpath(method.next), 0, (), retvar, tid, sid))
+            workqueue.put((method.next.priority, callpath(method.next), 0, (), retvar, tid, sid, version))
         if hasstore:
             sid = generateId(method.store, (), {'obj': retvar['obj']}, 0)
-            workqueue.put((method.store.priority, callpath(method.store), 0, (), {'obj': retvar['obj']}, tid, sid))
+            workqueue.put((method.store.priority, callpath(method.store), 0, (), {'obj': retvar['obj']}, tid, sid, version))
     elif type(retvar) == tuple:
         if hasnext:
             sid = generateId(method.next, retvar, {}, 0)
-            workqueue.put((method.next.priority, callpath(method.next), 0, retvar, {}, tid, sid))
+            workqueue.put((method.next.priority, callpath(method.next), 0, retvar, {}, tid, sid, version))
         if hasstore:
             sid = generateId(method.store, retvar, {}, 0)
-            workqueue.put((method.store.priority, callpath(method.store), 0, (retvar[0],), {}, tid, sid))
+            workqueue.put((method.store.priority, callpath(method.store), 0, (retvar[0],), {}, tid, sid, version))
     else:
         if hasnext:
             sid = generateId(method.next, (retvar,), {}, 0)
-            workqueue.put((method.next.priority, callpath(method.next), 0, (retvar,), {}, tid, sid))
+            workqueue.put((method.next.priority, callpath(method.next), 0, (retvar,), {}, tid, sid, version))
         if hasstore:
             sid = generateId(method.store, (retvar,), {}, 0)
-            workqueue.put((method.store.priority, callpath(method.store), 0, (retvar,), {}, tid, sid))
+            workqueue.put((method.store.priority, callpath(method.store), 0, (retvar,), {}, tid, sid, version))
         # raise "Incorrect result for next function."
 
 
-def handleExcept(workqueue, method, args, kwargs, priority, methodName, times, tid, sid, count='fail'):
+def handleExcept(workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, count='fail'):
     if times < method.retry:
         times = times + 1
         sid = generateId(method, args, kwargs, times)
-        workqueue.put((priority, methodName, times, args, kwargs, tid, sid))
+        workqueue.put((priority, methodName, times, args, kwargs, tid, sid, version))
     else:
         setattr(method, count, getattr(method, count)+1)
         t, v, b = sys.exc_info()
@@ -313,7 +308,7 @@ def geventwork(workqueue):
             item = workqueue.get(timeout=10)
             if item is None:
                 continue
-            priority, methodId, methodName, times, args, kwargs, tid, sid= item
+            priority, methodId, methodName, times, args, kwargs, tid, sid, version= item
             method = ctypes.cast(methodId, ctypes.py_object).value
             try:
                 if method.timelimit > 0:
@@ -325,29 +320,29 @@ def geventwork(workqueue):
                 elif isinstance(result, types.GeneratorType):
                     try:
                         hasattr(method, 'index') and handleIndex(
-                            workqueue, result, method, args, kwargs, priority, methodName, times, tid)
+                            workqueue, result, method, args, kwargs, priority, methodName, times, tid, version)
                         for retvar in result:
                             handleNextStore(
-                                workqueue, retvar, method, tid, hasattr(method, 'next'), hasattr(method, 'store'))
+                                workqueue, retvar, method, tid, version, hasattr(method, 'next'), hasattr(method, 'store'))
                         method.succ = method.succ + 1
                     except TimeoutError:
                         handleExcept(
-                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, 'timeout')
+                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, 'timeout')
                     except:
                         handleExcept(
-                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, 'fail')
+                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, 'fail')
                 else:
                     handleNextStore(
-                        workqueue, result, method, tid, hasattr(method, 'next'), hasattr(method, 'store'))
+                        workqueue, result, method, tid, version, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
                 handleExcept(
-                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, 'timeout')
+                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, 'timeout')
             except:
                 handleExcept(
-                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, 'fail')
+                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, 'fail')
             finally:
-                workqueue.task_done((args, kwargs, priority, methodName, times, tid, sid))
+                workqueue.task_done((args, kwargs, priority, methodName, times, tid, sid, version))
                 timer.cancel()
                 del timer
 
@@ -382,7 +377,7 @@ class Workflows(object):
         任务流
     """
 
-    def __init__(self, worknum, queuetype, worktype, tid=0):
+    def __init__(self, worknum, queuetype, worktype, tid=0, aid=0):
         if worktype == 'COROUTINE':
             monkey.patch_all(Event=True)
             gid = threading._get_ident()
@@ -400,6 +395,7 @@ class Workflows(object):
         self.queue = None
         self.workers = []
         self.tid = tid
+        self.aid = aid
         
     def prepare(self, flow=None):
         self.workers = []
@@ -459,14 +455,22 @@ class Workflows(object):
     def tinder(self, flow):
         return self.__flows[flow]['tinder']
 
-    def section(self, flow, step=0):
-        if step == 0:
-            return self.tinder(flow)
-        else:
-            it = self.__flows.get(flow, {'tinder':None})['tinder']
-            for k in range(step):
-                it = it.next
-            return it
+    def select(self, flow, step=0, sid=[]):
+        section = None
+        index = 0
+        it = self.__flows.get(flow, {'tinder':None})['tinder']
+        if index < len(sid):
+            setattr(it, 'sid', sid[index])
+        if step == index:
+            section = it
+        while hasattr(it, 'next'):
+            it = it.next
+            index = index + 1
+            if index < len(sid):
+                setattr(it, 'sid', sid[index])
+            if step == index:
+                section = it
+        return section
 
     def terminator(self, flow):
         return self.__flows[flow]['terminator']
@@ -535,7 +539,7 @@ class Workflows(object):
                 self.__flows[label]['weight']['levels'].append(0)
             print "Inner workflow is set."
 
-    def fire(self, flow, step=0, *args, **kwargs):
+    def fire(self, flow, step, version, *args, **kwargs):
         it = self.__flows.get(flow, {'tinder':None})['tinder']
         if it is not None:
             self.prepare(flow)
@@ -546,7 +550,7 @@ class Workflows(object):
                 print 'Flow %s has no %d steps.' % (flow, step)
             else:
                 sid = generateId(it, args, kwargs, 0)
-                self.queue.put((it.priority, callpath(it), 0, args, kwargs, str(self.tid), sid))
+                self.queue.put((it.priority, callpath(it), 0, args, kwargs, str(self.tid), sid, version))
                 self.queue.funid(callpath(it), id(it))
                 if hasattr(it, 'store'):
                     self.queue.funid(callpath(it.store), id(it.store))
@@ -587,7 +591,7 @@ class Workflows(object):
                 worker.setDaemon(True)
                 worker.start()
 
-    def task(self, weight, section, tid, *args, **kwargs):
+    def task(self, weight, section, tid, version, *args, **kwargs):
         self.queue.rank(weight)
         it = section
         self.queue.funid(callpath(it), id(it))
@@ -599,7 +603,7 @@ class Workflows(object):
             if hasattr(it, 'store'):
                 self.queue.funid(callpath(it.store), id(it.store))
         sid = generateId(it, args, kwargs, 0)
-        self.queue.put((section.priority, callpath(section), 0, args, kwargs, str(tid), sid))
+        self.queue.put((section.priority, callpath(section), 0, args, kwargs, str(tid), sid, version))
 
     def __str__(self):
         desc = object.__str__(self)

@@ -34,7 +34,7 @@ class Queue(object):
     conditions = {}
 
     def __init__(self, host='localhost', port=27017, db='pholcus', tube='', timeout=30, items=None, unfinished_tasks=None, init=True):
-        self.mc = pymongo.MongoClient(host='localhost', port=port)[db]
+        self.mc = pymongo.MongoClient(host=host, port=port)[db]
         self.tube = 'task%s' % tube
         self.unfinished_tasks = 0
 
@@ -56,12 +56,12 @@ class Queue(object):
             self.mc['%s_funid' % self.tube].update({'methodName':fid(methodName)}, {'$set':{'methodId':methodId, 'methodName':fid(methodName)}}, upsert=True)
 
     def put(self, item):
-        priority, methodName, times, args, kwargs, tid, sid = item
+        priority, methodName, times, args, kwargs, tid, sid, version = item
         sid = sid or str(ObjectId())
         txt = pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid})
         try:
             status = 2 if times == 0 else 4
-            self.mc[self.tube].insert({'_id':sid, 'priority':priority, 'methodName':methodName, 'status':status, 'times':times, 'deny':[], 'tid':tid, 'txt':txt}, continue_on_error=True)
+            self.mc[self.tube].insert({'_id':sid, 'priority':priority, 'methodName':methodName, 'status':status, 'times':times, 'deny':[], 'tid':tid, 'txt':txt, 'version':version}, continue_on_error=True)
             Queue.conditions[self.tube]['event'].clear()
         except:
             pass
@@ -72,7 +72,7 @@ class Queue(object):
             _id = item['_id']
             item = item['txt'].encode('utf-8')
             item = pickle.loads(item)
-            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], _id
+            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], _id, item['version']
         else:
             return None
 
