@@ -7,7 +7,7 @@ import threading
 import cPickle as pickle
 from bson import ObjectId
 
-from .. import redis
+from lib import redis
 from ..character import unicode2utf8
 from . import fid
 

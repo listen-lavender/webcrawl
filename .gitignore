@@ -1,0 +1,16 @@
+node_modules
+bower_components
+.idea/
+*.pyc
+*.swp
+*.log
+*.iml
+*.tmp
+*~
+*.pid
+dump.rb
+__test__
+apidoc
+apidoc.json
+video.mp4
+.DS_Store
