@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-import json
 import heapq
 import pymongo
 import threading
 import cPickle as pickle
 from bson import ObjectId
 
-from ..character import unicode2utf8
+from ..character import unicode2utf8, json
 from . import fid
 
 try:
@@ -23,7 +22,7 @@ except:
 
     def logprint(n, p):
         def _wraper(*args, **kwargs):
-            print(' '.join(args))
+            pass
         return _wraper, None
 
 _print, logger = logprint(modulename(__file__), modulepath(__file__))
@@ -70,9 +69,10 @@ class Queue(object):
         item = self.mc[self.tube].find_one_and_update({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[]}, 'status':{'$in':[2, 4]}}, {'$set':{'status':3}}, sort=[('priority', 1)])
         if item:
             _id = item['_id']
+            version = item['version']
             item = item['txt'].encode('utf-8')
             item = pickle.loads(item)
-            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], _id, item['version']
+            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], _id, version
         else:
             return None
 
@@ -84,16 +84,17 @@ class Queue(object):
 
     def task_done(self, item, force=False):
         if item is not None:
-            args, kwargs, priority, sname, times, tid, sid = item
-            _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
+            args, kwargs, priority, sname, times, tid, sid, version = item
+            _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
             self.mc[self.tube].update({'_id':sid}, {'$set':{'status':1}})
         if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()
 
     def task_skip(self, item):
-        tid, sid, count, status, sname, priority, times, args, kwargs, txt = item
-        _print('', tid=tid, sid=sid, type='COMPLETED', status=0, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
-        self.mc[self.tube].update({'_id':sid}, {'$set':{'status':0}})
+        if item is not None:
+            tid, sid, count, sname, priority, times, args, kwargs, txt, version = item
+            _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=0, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
+            self.mc[self.tube].update({'_id':sid}, {'$set':{'status':0}})
         if self.empty():
             Queue.conditions[self.tube]['event'].set()
 

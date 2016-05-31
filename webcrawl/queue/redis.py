@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-import json
 import heapq
 import threading
 import cPickle as pickle
 from bson import ObjectId
 
 from lib import redis
-from ..character import unicode2utf8
+from ..character import unicode2utf8, json
 from . import fid
 
 try:
@@ -23,7 +22,7 @@ except:
 
     def logprint(n, p):
         def _wraper(*args, **kwargs):
-            print(' '.join(args))
+            pass
         return _wraper, None
 
 _print, logger = logprint(modulename(__file__), modulepath(__file__))
@@ -31,11 +30,18 @@ _print, logger = logprint(modulename(__file__), modulepath(__file__))
 class Queue(object):
     conditions = {}
 
-    def __init__(self, host='localhost', port=6379, db=0, tube='', timeout=30, items=None, unfinished_tasks=None, init=True, weight=[]):
+    def __init__(self, host='localhost', port=6379, db=0, tube='', timeout=30, items=None, unfinished_tasks=0, init=True, weight=[]):
         self.rc = redis.StrictRedis(host=host, port=port, db=db)
         self.prefix = 'pholcus_task'
         self.tube = '%s%s' % (self.prefix, tube)
         self.unfinished_tasks = 0
+
+        if unfinished_tasks:
+            self.unfinished_tasks = unfinished_tasks
+        elif items:
+            self.unfinished_tasks = len(items)
+        else:
+            self.unfinished_tasks = 0
 
         if self.tube in Queue.conditions:
             pass
@@ -59,6 +65,7 @@ class Queue(object):
         # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
         self.rc.lpush('_'.join([self.tube, str(priority)]), pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid, 'version':version}))
+        self.unfinished_tasks += 1
         Queue.conditions[self.tube]['event'].clear()
 
     def get(self, block=True, timeout=0):
@@ -78,9 +85,18 @@ class Queue(object):
 
     def task_done(self, item, force=False):
         if item is not None:
-            args, kwargs, priority, sname, times, tid, sid = item
-            _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
-        if self.empty() or force:
+            self.unfinished_tasks -= 1
+            args, kwargs, priority, sname, times, tid, sid, version = item
+            _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
+        if self.unfinished_tasks < 1 or force:
+            Queue.conditions[self.tube]['event'].set()
+
+    def task_skip(self, item):
+        if item is not None:
+            self.unfinished_tasks -= 1
+            tid, sid, count, sname, priority, times, args, kwargs, txt, version = item
+            _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=0, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)            
+        if self.empty():
             Queue.conditions[self.tube]['event'].set()
 
     def join(self):

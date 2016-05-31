@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-import json
 import heapq
 import threading
 import cPickle as pickle
 from bson import ObjectId
 
 import lib
-from ..character import unicode2utf8
+from ..character import unicode2utf8, json
 from . import fid
 
 try:
@@ -23,7 +22,7 @@ except:
 
     def logprint(n, p):
         def _wraper(*args, **kwargs):
-            print(' '.join(args))
+            pass
         return _wraper, None
 
 _print, logger = logprint(modulename(__file__), modulepath(__file__))
@@ -84,8 +83,29 @@ def Queue():
 
     def task_done(self, item, force=False):
         if item is not None:
-            args, kwargs, priority, sname, times, tid, sid = item
-            _print('', tid=tid, sid=sid, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
+            args, kwargs, priority, sname, times, tid, sid, version = item
+            _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
+        if self.is_patch:
+            if self.unfinished_tasks <= 0:
+                raise ValueError('task_done() called too many times')
+            self.unfinished_tasks -= 1
+            if self.unfinished_tasks == 0 or force:
+                self._cond.set()
+        else:
+            self.all_tasks_done.acquire()
+            try:
+                unfinished = self.unfinished_tasks - 1
+                if unfinished <= 0 or force:
+                    if unfinished < 0:
+                        raise ValueError('task_done() called too many times')
+                    self.all_tasks_done.notify_all()
+                self.unfinished_tasks = unfinished
+            finally:
+                self.all_tasks_done.release()
+
+    def task_skip(self, item):
+        tid, sid, count, sname, priority, times, args, kwargs, txt, version = item
+        _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=0, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
         if self.is_patch:
             if self.unfinished_tasks <= 0:
                 raise ValueError('task_done() called too many times')

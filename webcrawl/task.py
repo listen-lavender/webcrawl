@@ -75,7 +75,7 @@ except:
 
     def logprint(n, p):
         def _wraper(*args, **kwargs):
-            print(' '.join(args))
+            pass
         return _wraper, None
 
 _print, logger = logprint(modulename(__file__), modulepath(__file__))
@@ -266,8 +266,8 @@ def handleNextStore(workqueue, retvar, method, tid, version, hasnext=False, hass
             sid = generateId(method.next, (), retvar, 0)
             workqueue.put((method.next.priority, callpath(method.next), 0, (), retvar, tid, sid, version))
         if hasstore:
-            sid = generateId(method.store, (), {'obj': retvar['obj']}, 0)
-            workqueue.put((method.store.priority, callpath(method.store), 0, (), {'obj': retvar['obj']}, tid, sid, version))
+            sid = generateId(method.store, (), retvar, 0)
+            workqueue.put((method.store.priority, callpath(method.store), 0, (), {'obj':retvar}, tid, sid, version))
     elif type(retvar) == tuple:
         if hasnext:
             sid = generateId(method.next, retvar, {}, 0)
@@ -295,7 +295,7 @@ def handleExcept(workqueue, method, args, kwargs, priority, methodName, times, t
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
         txt = ','.join(err_messages)
-        item = tid, sid, count.upper(), status, methodName, priority, times, args, kwargs, txt
+        item = tid, sid, count.upper(), methodName, priority, times, args, kwargs, txt, version
         workqueue.task_skip(item)
 
 
