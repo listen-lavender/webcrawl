@@ -48,11 +48,13 @@ class Queue(object):
             for item in items:
                 self.put(item)
 
-    def funid(self, methodName, methodId=None):
+    def funid(self, rootid, methodName, methodId=None):
         if methodId is None:
             return self.mc['%s_funid' % self.tube].find_one({'methodName':fid(methodName)})['methodId']
         else:
-            self.mc['%s_funid' % self.tube].update({'methodName':fid(methodName)}, {'$set':{'methodId':methodId, 'methodName':fid(methodName)}}, upsert=True)
+            result = self.mc['%s_funid' % self.tube].update({'methodName':fid(methodName)}, {'$set':{'methodId':methodId, 'methodName':fid(methodName)}}, upsert=True)
+            rootid = result['upserted'] if 'upserted' in result else None
+            return rootid
 
     def put(self, item):
         priority, methodName, times, args, kwargs, tid, sid, version = item

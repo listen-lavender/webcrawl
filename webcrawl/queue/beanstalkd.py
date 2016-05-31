@@ -48,11 +48,12 @@ class Queue(object):
             for item in items:
                 self.put(item)
 
-    def funid(self, methodName, methodId=None):
+    def funid(self, rootid, methodName, methodId=None):
         if methodId is None:
             return Queue.funids[fid(methodName)]
         else:
             Queue.funids[fid(methodName)] = methodId
+            return None
 
     def put(self, item):
         priority, methodName, times, args, kwargs, tid, sid, version = item
