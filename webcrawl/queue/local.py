@@ -86,18 +86,18 @@ def Queue():
             args, kwargs, priority, sname, times, tid, sid, version = item
             _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
         if self.is_patch:
-            if self.unfinished_tasks <= 0:
-                raise ValueError('task_done() called too many times')
+            # if self.unfinished_tasks <= 0:
+            #     raise ValueError('task_done() called too many times')
             self.unfinished_tasks -= 1
-            if self.unfinished_tasks == 0 or force:
+            if self.unfinished_tasks < 0 or force:
                 self._cond.set()
         else:
             self.all_tasks_done.acquire()
             try:
                 unfinished = self.unfinished_tasks - 1
                 if unfinished <= 0 or force:
-                    if unfinished < 0:
-                        raise ValueError('task_done() called too many times')
+                    # if unfinished < 0:
+                    #     raise ValueError('task_done() called too many times')
                     self.all_tasks_done.notify_all()
                 self.unfinished_tasks = unfinished
             finally:
@@ -107,18 +107,18 @@ def Queue():
         tid, sid, count, sname, priority, times, args, kwargs, txt, version = item
         _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=0, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
         if self.is_patch:
-            if self.unfinished_tasks <= 0:
-                raise ValueError('task_done() called too many times')
+            # if self.unfinished_tasks <= 0:
+            #     raise ValueError('task_done() called too many times')
             self.unfinished_tasks -= 1
-            if self.unfinished_tasks == 0 or force:
+            if self.unfinished_tasks < 1 or force:
                 self._cond.set()
         else:
             self.all_tasks_done.acquire()
             try:
                 unfinished = self.unfinished_tasks - 1
                 if unfinished <= 0 or force:
-                    if unfinished < 0:
-                        raise ValueError('task_done() called too many times')
+                    # if unfinished < 0:
+                    #     raise ValueError('task_done() called too many times')
                     self.all_tasks_done.notify_all()
                 self.unfinished_tasks = unfinished
             finally:

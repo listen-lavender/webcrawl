@@ -96,7 +96,7 @@ class Queue(object):
             self.unfinished_tasks -= 1
             tid, sid, count, sname, priority, times, args, kwargs, txt, version = item
             _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=0, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)            
-        if self.empty():
+        if self.unfinished_tasks < 1 or force:
             Queue.conditions[self.tube]['event'].set()
 
     def join(self):
