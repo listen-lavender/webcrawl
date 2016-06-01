@@ -549,17 +549,16 @@ class Workflows(object):
             except:
                 print 'Flow %s has no %d steps.' % (flow, step)
             else:
-                rootid = None
-                rootid = self.queue.funid(rootid, callpath(it), id(it))
-                if hasattr(it, 'store'):
-                    self.queue.funid(rootid, callpath(it.store), id(it.store))
-                while hasattr(it, 'next'):
-                    it = it.next
-                    self.queue.funid(rootid, callpath(it), id(it))
-                    if hasattr(it, 'store'):
-                        self.queue.funid(rootid, callpath(it.store), id(it.store))
                 sid = generateId(it, args, kwargs, 0)
                 self.queue.put((it.priority, callpath(it), 0, args, kwargs, str(self.tid), sid, version))
+                self.queue.funid(callpath(it), id(it))
+                if hasattr(it, 'store'):
+                    self.queue.funid(callpath(it.store), id(it.store))
+                while hasattr(it, 'next'):
+                    it = it.next
+                    self.queue.funid(callpath(it), id(it))
+                    if hasattr(it, 'store'):
+                        self.queue.funid(callpath(it.store), id(it.store))
                 for worker in self.workers:
                     if self.__worktype == 'COROUTINE':
                         gevent.spawn(worker)
@@ -595,15 +594,14 @@ class Workflows(object):
     def task(self, weight, section, tid, version, *args, **kwargs):
         self.queue.rank(weight)
         it = section
-        rootid = None
-        rootid = self.queue.funid(rootid, callpath(it), id(it))
+        self.queue.funid(callpath(it), id(it))
         if hasattr(it, 'store'):
-            self.queue.funid(rootid, callpath(it.store), id(it.store))
+            self.queue.funid(callpath(it.store), id(it.store))
         while hasattr(it, 'next'):
             it = it.next
-            self.queue.funid(rootid, callpath(it), id(it))
+            self.queue.funid(callpath(it), id(it))
             if hasattr(it, 'store'):
-                self.queue.funid(rootid, callpath(it.store), id(it.store))
+                self.queue.funid(callpath(it.store), id(it.store))
         sid = generateId(it, args, kwargs, 0)
         self.queue.put((section.priority, callpath(section), 0, args, kwargs, str(tid), sid, version))
 

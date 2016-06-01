@@ -54,12 +54,11 @@ class Queue(object):
             for item in items:
                 self.put(item)
 
-    def funid(self, rootid, methodName, methodId=None):
+    def funid(self, methodName, methodId=None):
         if methodId is None:
             return int(self.rc.hget('%s_funid' % self.tube, fid(methodName)) or 0)
         else:
             self.rc.hset('%s_funid' % self.tube, fid(methodName), methodId)
-            return None
 
     def put(self, item):
         priority, methodName, times, args, kwargs, tid, sid, version = item

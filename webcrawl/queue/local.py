@@ -57,12 +57,11 @@ def Queue():
         if self.is_patch and self.unfinished_tasks:
             self._cond.clear()
 
-    def funid(self, rootid, methodName, methodId=None):
+    def funid(self, methodName, methodId=None):
         if methodId is None:
             return self.funids[fid(methodName)]
         else:
             self.funids[fid(methodName)] = methodId
-            return None
 
     def _init(self, maxsize):
         if self.items:
