@@ -143,7 +143,7 @@ def Queue():
         pass
 
     PriorityQueue = type('PriorityQueue', (lib.queue.Queue, ), {'__init__':__init__, 
-        '_init':_init, 'funid':funid, '_put':_put, '_get':_get, 'task_done':task_done, 'join':join, 'rank':rank, 'collect':collect})
+        '_init':_init, 'funid':funid, '_put':_put, '_get':_get, 'task_done':task_done, 'task_skip':task_skip, 'join':join, 'rank':rank, 'collect':collect})
     PriorityQueue.funids = {}
 
     return PriorityQueue
