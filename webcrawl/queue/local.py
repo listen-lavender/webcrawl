@@ -110,13 +110,13 @@ def Queue():
             # if self.unfinished_tasks <= 0:
             #     raise ValueError('task_done() called too many times')
             self.unfinished_tasks -= 1
-            if self.unfinished_tasks < 1 or force:
+            if self.unfinished_tasks < 1:
                 self._cond.set()
         else:
             self.all_tasks_done.acquire()
             try:
                 unfinished = self.unfinished_tasks - 1
-                if unfinished <= 0 or force:
+                if unfinished <= 0:
                     # if unfinished < 0:
                     #     raise ValueError('task_done() called too many times')
                     self.all_tasks_done.notify_all()
