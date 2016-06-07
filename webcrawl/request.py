@@ -10,7 +10,6 @@ import urllib2
 import StringIO
 import functools
 import threading
-import urlparse
 import time
 
 from queue.lib.queue import Queue
@@ -272,35 +271,7 @@ def treeXml(content, coding='unicode'):
     """
     """
     return tree(content, coding, 'XML')
-
-def parturl(url):
-    queryparas = dict(urlparse.parse_qsl(urlparse.urlparse(url).query))
-    routeparas = url.split('//')[-1]
-    routeparas = routeparas[routeparas.index('/')+1:]
-    routeparas = routeparas.split('?')[0]
-    routeparas = tuple(routeparas.split('/'))
-    return routeparas, queryparas
-
-def urljoin(refurl, objurl):
-    """
-    >>> ensureurl('http://www.homeinns.com/hotel', 'http://www.homeinns.com/beijing')
-    'http://www.homeinns.com/beijing'
-    >>> ensureurl('http://www.homeinns.com/hotel', '/beijing')
-    'http://www.homeinns.com/beijing'
-    >>> ensureurl('http://www.homeinns.com/hotel', 'beijing')
-    'http://www.homeinns.com/beijing'
-    """
-    if objurl.strip() in ('', '#'):
-        return ''
-    elif objurl.startswith('http'):
-        return objurl
-    elif objurl.startswith('/'):
-        refurl = refurl.replace('//', '{$$}')
-        return ''.join([refurl[:refurl.index('/')].replace('{$$}', '//'), objurl])
-    else:
-        return '/'.join([refurl[:refurl.rindex('/')], objurl])
-
-ensureurl = urljoin
+    
 
 if __name__ == '__main__':
     print 'start...'
