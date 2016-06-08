@@ -14,7 +14,7 @@ from task import Workflows
 
 WORKNUM = 30
 QUEUETYPE = 'P'
-WORKTYPE = 'COROUTINE'
+WORKTYPE = 'THREAD'
 
 
 class SpiderOrigin(Workflows):
@@ -26,7 +26,6 @@ class SpiderOrigin(Workflows):
         # Workflows.__init__(self, worknum=worknum, queuetype=queuetype, worktype=worktype)
         # Keeper.__init__(self)
         self.timeout = timeout
-        self.dones = set()
         self.extractFlow()
 
     def fetchDatas(self, flow, step=0, *args, **kwargs):
@@ -57,66 +56,11 @@ class SpiderOrigin(Workflows):
                     it = it.next
                 else:
                     break
-            self.dones.add(flow)
             end = time.time()
             self.totaltime = end - start
             return True
         except:
             return False
-
-    def clearDataOne(self, one):
-        pass
-
-    def implementDataone(self, *args, **kwargs):
-        pass
-
-    @classmethod
-    def uniquetime(cls, timespan=1, lasttime=None):
-        if lasttime is None:
-            with cls.__lock:
-                cls.__lasttime = cls.__lasttime + \
-                    datetime.timedelta(seconds=timespan)
-                return cls.__lasttime
-        else:
-            cls.__lasttime = max(cls.__lasttime, lasttime)
-
-    def statistic(self):
-        for flow in self.dones:
-            it = self.tinder(flow)
-            self.stat = {'total': {'succ': 0, 'fail': 0, 'timeout': 0}}
-            self.stat[it.__name__] = {}
-            self.stat[it.__name__]['succ'] = it.succ
-            self.stat[it.__name__]['fail'] = it.fail
-            self.stat[it.__name__]['timeout'] = it.timeout
-            self.stat['total']['succ'] += it.succ
-            self.stat['total']['fail'] += it.fail
-            self.stat['total']['timeout'] += it.timeout
-            if hasattr(it, 'store'):
-                self.stat['total']['succ'] += it.store.succ
-                self.stat['total']['fail'] += it.store.fail
-                self.stat['total']['timeout'] += it.store.timeout
-            #     print it.store.__name__, 'succ: ', it.store.succ
-            #     print it.store.__name__, 'fail: ', it.store.fail
-            #     print it.store.__name__, 'timeout: ', it.store.timeout
-            while hasattr(it, 'next'):
-                self.stat[it.next.__name__] = {}
-                self.stat[it.next.__name__]['succ'] = it.next.succ
-                self.stat[it.next.__name__]['fail'] = it.next.fail
-                self.stat[it.next.__name__]['timeout'] = it.next.timeout
-                self.stat['total']['succ'] += it.next.succ
-                self.stat['total']['fail'] += it.next.fail
-                self.stat['total']['timeout'] += it.next.timeout
-                if hasattr(it.next, 'store'):
-                    self.stat['total']['succ'] += it.next.store.succ
-                    self.stat['total']['fail'] += it.next.store.fail
-                    self.stat['total']['timeout'] += it.next.store.timeout
-                #     print it.next.store.__name__, 'succ: ', it.next.store.succ
-                #     print it.next.store.__name__, 'fail: ', it.next.store.fail
-                #     print it.next.store.__name__, 'timeout: ', it.next.store.timeout
-                it = it.next
-
-    def now():
-        return datetime.datetime.now()
 
     def __del__(self):
         pass
