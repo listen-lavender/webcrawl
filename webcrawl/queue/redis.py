@@ -107,12 +107,6 @@ class Queue(object):
             if one.startswith(self.prefix):
                 self.rc.delete(one)
 
-    def rank(self, weight):
-        Queue.conditions[self.tube]['mutex'].acquire()
-        Queue.conditions[self.tube]['weight'].extend(weight)
-        Queue.conditions[self.tube]['weight'].sort()
-        Queue.conditions[self.tube]['mutex'].release()
-
     def total(self):
         total = 0
         for one in self.rc.keys():

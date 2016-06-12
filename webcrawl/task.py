@@ -377,7 +377,7 @@ class Workflows(object):
         任务流
     """
 
-    def __init__(self, worknum, queuetype, worktype, tid=0, aid=0):
+    def __init__(self, worknum, queuetype, worktype, tid=0, aid=0, settings={}):
         if worktype == 'COROUTINE':
             monkey.patch_all(Event=True)
             gid = threading._get_ident()
@@ -396,6 +396,7 @@ class Workflows(object):
         self.workers = []
         self.tid = tid
         self.aid = aid
+        self.settings = settings
         
     def prepare(self, flow=None):
         self.workers = []
@@ -403,19 +404,26 @@ class Workflows(object):
         tube = {}
         if flow:
             weight = self.weight(flow)
-            tube['tube'] = str(id(self))
-        self.queue = LocalQueue()()
+            self.settings['tube'] = str(id(self))
+
         try:
             if self.__queuetype == 'P':
-                self.queue = LocalQueue()()
+                self.settings = {}
+                QCLS = LocalQueue()
+                # self.queue = LocalQueue()()
             elif self.__queuetype == 'B':
-                self.queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
+                QCLS = BeanstalkdQueue
+                # self.queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
             elif self.__queuetype == 'R':
-                self.queue = RedisQueue(weight=weight, **dict(DataQueue.redis, **tube))
+                self.settings['weight'] = weight
+                QCLS = RedisQueue
+                # self.queue = RedisQueue(weight=weight, **dict(DataQueue.redis, **tube))
             elif self.__queuetype == 'M':
-                self.queue = MongoQueue(**dict(DataQueue.mongo, **tube))
+                QCLS = MongoQueue
+                # self.queue = MongoQueue(**dict(DataQueue.mongo, **tube))
             else:
                 raise Exception('Error queue type.')
+            self.queue = QCLS(**self.settings)
         except:
             print 'Wrong type of queue, please choose P(local queue), B(beanstalkd queue), R(redis queue), M(mongo queue) start your beanstalkd service.'
 
@@ -440,16 +448,12 @@ class Workflows(object):
         else:
             from time import sleep
             for k in range(self.__worknum):
+                queue = self.queue
                 if self.__queuetype == 'P':
-                    worker = Foreverworker(self.queue)
-                elif self.__queuetype == 'B':
-                    worker = Foreverworker(BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube)))
-                elif self.__queuetype == 'R':
-                    worker = Foreverworker(RedisQueue(weight=weight, **dict(DataQueue.redis, **tube)))
-                elif self.__queuetype == 'M':
-                    worker = Foreverworker(MongoQueue(**dict(DataQueue.mongo, **tube)))
+                    queue = self.queue
                 else:
-                    raise Exception('Error queue type.')
+                    queue = QCLS(**self.settings)
+                worker = Foreverworker(queue)
                 self.workers.append(worker)
 
     def tinder(self, flow):
@@ -591,8 +595,7 @@ class Workflows(object):
                 worker.setDaemon(True)
                 worker.start()
 
-    def task(self, weight, section, tid, version, *args, **kwargs):
-        self.queue.rank(weight)
+    def task(self, section, tid, version, *args, **kwargs):
         it = section
         self.queue.funid(callpath(it), id(it))
         if hasattr(it, 'store'):

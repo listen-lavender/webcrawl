@@ -28,10 +28,10 @@ class SpiderOrigin(Workflows):
         self.timeout = timeout
         self.extractFlow()
 
-    def fetchDatas(self, flow, step=0, *args, **kwargs):
+    def fetchDatas(self, flow, step, version, *args, **kwargs):
         try:
             start = time.time()
-            self.fire(flow, step, *args, **kwargs)
+            self.fire(flow, step, version, *args, **kwargs)
             if self.timeout > -1:
                 def check(self, timeout):
                     time.sleep(timeout)
@@ -66,30 +66,4 @@ class SpiderOrigin(Workflows):
         pass
 
 if __name__ == '__main__':
-    from threading import Thread, currentThread
-
-    class AB(SpiderOrigin):
-
-        def __init__(self, worknum=WORKNUM, queuetype=QUEUETYPE, worktype=WORKTYPE, timeout=-1):
-            super(AB, self).__init__(
-                worknum=worknum, queuetype=queuetype, worktype=worktype)
-
-    class CD(object):
-
-        def __init__(self):
-            pass
-
-        def run(self, name, nums, times):
-            for k in range(nums):
-                time.sleep(times)
-                print name, AB.uniquetime()
-
-    cd = CD()
-    cdts = []
-    for k in range(10):
-        cdt = Thread(
-            target=cd.run, args=('thread%d' % k, k + 1, (10 - k) * 0.1))
-        cdts.append(cdt)
-        cdt.start()
-    for cdt in cdts:
-        cdt.join()
+    pass
