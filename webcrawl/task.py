@@ -44,24 +44,6 @@ def patch_thread(threading=True, _threading_local=True, Queue=True, Event=False)
         _threading_local.local = local
 
 monkey.patch_thread = patch_thread
-DataQueue = MyLocal(
-        redis={
-            'host':'localhost',
-            'port':6379,
-            'db':0,
-            'tube':'pholcus_task',
-        },
-        beanstalkd={
-            'host':'localhost',
-            'port':11300,
-            'tube':'pholcus_task',
-        },
-        mongo={
-            'host':'localhost',
-            'port':27017,
-            'tube':'pholcus_task',
-        }
-    )
 
 try:
     from kokolog.aboutfile import modulename, modulepath
@@ -377,7 +359,7 @@ class Workflows(object):
         任务流
     """
 
-    def __init__(self, worknum, queuetype, worktype, tid=0, aid=0, settings={}):
+    def __init__(self, worknum, queuetype, worktype, tid=0, settings={}):
         if worktype == 'COROUTINE':
             monkey.patch_all(Event=True)
             gid = threading._get_ident()
@@ -395,7 +377,6 @@ class Workflows(object):
         self.queue = None
         self.workers = []
         self.tid = tid
-        self.aid = aid
         self.settings = settings
         
     def prepare(self, flow=None):
@@ -432,23 +413,14 @@ class Workflows(object):
             from gevent import sleep
             for k in range(self.__worknum):
                 if self.__queuetype == 'P':
-                    worker = functools.partial(geventwork, self.queue)
-                elif self.__queuetype == 'B':
-                    worker = functools.partial(
-                        geventwork, BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube)))
-                elif self.__queuetype == 'R':
-                    worker = functools.partial(
-                        geventwork, RedisQueue(weight=weight, **dict(DataQueue.redis, **tube)))
-                elif self.__queuetype == 'M':
-                    worker = functools.partial(
-                        geventwork, MongoQueue(**dict(DataQueue.mongo, **tube)))
+                    queue = self.queue
                 else:
-                    raise Exception('Error queue type.')
+                    queue = QCLS(**self.settings)
+                worker = functools.partial(geventwork, queue)
                 self.workers.append(worker)
         else:
             from time import sleep
             for k in range(self.__worknum):
-                queue = self.queue
                 if self.__queuetype == 'P':
                     queue = self.queue
                 else:
