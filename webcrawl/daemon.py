@@ -76,7 +76,15 @@ class Daemon(object):
         file(self.pidfile, 'w+').write("%s\n" % pid)
 
     def delpid(self):
-        os.remove(self.stderr)
+        if not self.stdin == '/dev/null':
+            os.remove(self.stdin)
+
+        if not self.stdout == '/dev/null':
+            os.remove(self.stdout)
+
+        if not self.stderr == '/dev/null':
+            os.remove(self.stderr)
+
         os.remove(self.pidfile)
 
     def start(self, timeout=-1):
@@ -132,7 +140,15 @@ class Daemon(object):
             err = str(err)
             if err.find("No such process") > 0:
                 if os.path.exists(self.pidfile):
-                    os.remove(self.stderr)
+                    if not self.stdin == '/dev/null':
+                        os.remove(self.stdin)
+
+                    if not self.stdout == '/dev/null':
+                        os.remove(self.stdout)
+
+                    if not self.stderr == '/dev/null':
+                        os.remove(self.stderr)
+                        
                     os.remove(self.pidfile)
             else:
                 print str(err)
