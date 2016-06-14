@@ -267,7 +267,7 @@ def handleNextStore(workqueue, retvar, method, tid, version, hasnext=False, hass
         # raise "Incorrect result for next function."
 
 
-def handleExcept(workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, count='fail'):
+def handleExcept(workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, create_time, count='FAIL'):
     if times < method.retry:
         times = times + 1
         sid = generateId(method, args, kwargs, times)
@@ -277,8 +277,7 @@ def handleExcept(workqueue, method, args, kwargs, priority, methodName, times, t
         t, v, b = sys.exc_info()
         err_messages = traceback.format_exception(t, v, b)
         txt = ','.join(err_messages)
-        item = tid, sid, count.upper(), methodName, priority, times, args, kwargs, txt, version
-        workqueue.task_skip(item)
+        workqueue.task_skip((tid, sid, version, count, priority, times, args, kwargs, txt, create_time))
 
 
 def geventwork(workqueue):
@@ -296,6 +295,7 @@ def geventwork(workqueue):
                 if method.timelimit > 0:
                     timer = Timeout(method.timelimit, TimeoutError)
                     timer.start()
+                create_time = time.time()
                 result = method(*args, **kwargs)
                 if result is None:
                     method.succ = method.succ + 1
@@ -309,22 +309,22 @@ def geventwork(workqueue):
                         method.succ = method.succ + 1
                     except TimeoutError:
                         handleExcept(
-                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, 'timeout')
+                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, create_time, 'TIMEOUT')
                     except:
                         handleExcept(
-                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, 'fail')
+                            workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, create_time, 'FAIL')
                 else:
                     handleNextStore(
                         workqueue, result, method, tid, version, hasattr(method, 'next'), hasattr(method, 'store'))
                     method.succ = method.succ + 1
             except TimeoutError:
                 handleExcept(
-                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, 'timeout')
+                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, create_time, 'TIMEOUT')
             except:
                 handleExcept(
-                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, 'fail')
+                    workqueue, method, args, kwargs, priority, methodName, times, tid, sid, version, create_time, 'FAIL')
             finally:
-                workqueue.task_done((args, kwargs, priority, methodName, times, tid, sid, version))
+                workqueue.task_done((tid, sid, version, 'SUCC', priority, times, args, kwargs, None, create_time))
                 timer.cancel()
                 del timer
 

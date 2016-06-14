@@ -77,16 +77,28 @@ class Queue(object):
 
     def task_done(self, item, force=False):
         if item is not None:
-            args, kwargs, priority, sname, times, tid, sid, version = item
-            _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=1, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
+            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
+            elapse = time.time() - create_time
+            create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
+            _print('', tid=tid, sid=sid, 
+                version=version, status=status, 
+                elapse=elapse, priority=priority, 
+                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
+                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
         if self.empty() or force:
             # if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()
 
     def task_skip(self, item):
         if item is not None:
-            tid, sid, count, sname, priority, times, args, kwargs, txt, version = item
-            _print('', tid=tid, sid=sid, version=version, type='COMPLETED', status=0, sname=sname, priority=priority, times=times, args='(%s)' % ', '.join([str(one) for one in args]), kwargs=json.dumps(kwargs, ensure_ascii=False), txt=None)
+            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
+            elapse = time.time() - create_time
+            create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
+            _print('', tid=tid, sid=sid, 
+                version=version, status=status, 
+                elapse=elapse, priority=priority, 
+                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
+                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
         if self.empty():
             # if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()
