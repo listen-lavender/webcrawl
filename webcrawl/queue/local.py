@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-
+import time
 import heapq
 import threading
 import cPickle as pickle
@@ -57,11 +57,11 @@ def Queue():
         if self.is_patch and self.unfinished_tasks:
             self._cond.clear()
 
-    def funid(self, methodName, methodId=None):
-        if methodId is None:
-            return self.funids[fid(methodName)]
+    def funid(self, name, mid=None):
+        if mid is None:
+            return self.funids[fid(name)]
         else:
-            self.funids[fid(methodName)] = methodId
+            self.funids[fid(name)] = mid
 
     def _init(self, maxsize):
         if self.items:
@@ -83,14 +83,12 @@ def Queue():
 
     def task_done(self, item, force=False):
         if item is not None:
-            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
-            elapse = time.time() - create_time
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
             create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, sid=sid, 
-                version=version, status=status, 
-                elapse=elapse, priority=priority, 
-                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
-                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
+            _print('', tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
         if self.is_patch:
             # if self.unfinished_tasks <= 0:
             #     raise ValueError('task_done() called too many times')
@@ -111,14 +109,12 @@ def Queue():
 
     def task_skip(self, item):
         if item is not None:
-            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
-            elapse = time.time() - create_time
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
             create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, sid=sid, 
-                version=version, status=status, 
-                elapse=elapse, priority=priority, 
-                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
-                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
+            _print('', tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
         if self.is_patch:
             # if self.unfinished_tasks <= 0:
             #     raise ValueError('task_done() called too many times')

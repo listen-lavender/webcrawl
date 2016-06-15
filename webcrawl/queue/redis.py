@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-
+import time
 import heapq
 import threading
 import cPickle as pickle
@@ -54,17 +54,17 @@ class Queue(object):
             for item in items:
                 self.put(item)
 
-    def funid(self, methodName, methodId=None):
-        if methodId is None:
-            return int(self.rc.hget('%s_funid' % self.tube, fid(methodName)) or 0)
+    def funid(self, name, mid=None):
+        if mid is None:
+            return int(self.rc.hget('%s_funid' % self.tube, fid(name)) or 0)
         else:
-            self.rc.hset('%s_funid' % self.tube, fid(methodName), methodId)
+            self.rc.hset('%s_funid' % self.tube, fid(name), mid)
 
     def put(self, item):
-        priority, methodName, times, args, kwargs, tid, sid, version = item
-        # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'methodId': methodId,
+        priority, name, times, args, kwargs, tid, ssid, version = item
+        # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'mid': mid,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
-        self.rc.lpush('_'.join([self.tube, str(priority)]), pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid, 'version':version}))
+        self.rc.lpush('_'.join([self.tube, str(priority)]), pickle.dumps({'priority': priority, 'name':name, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'ssid':ssid, 'version':version}))
         self.unfinished_tasks += 1
         Queue.conditions[self.tube]['event'].clear()
 
@@ -74,7 +74,7 @@ class Queue(object):
         if item:
             item = item[-1]
             item = pickle.loads(item)
-            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['sid'], item['version']
+            return item['priority'], self.funid(item['name']), item['name'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['ssid'], item['version']
 
     def empty(self):
         total = sum([self.rc.llen(one) for one in ['_'.join([str(self.tube), str(one)]) for one in Queue.conditions[self.tube]['weight']]])
@@ -86,28 +86,24 @@ class Queue(object):
     def task_done(self, item, force=False):
         if item is not None:
             self.unfinished_tasks -= 1
-            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
-            elapse = time.time() - create_time
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
             create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, sid=sid, 
-                version=version, status=status, 
-                elapse=elapse, priority=priority, 
-                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
-                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
+            _print('', tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
         if self.unfinished_tasks < 1 or force:
             Queue.conditions[self.tube]['event'].set()
 
     def task_skip(self, item):
         if item is not None:
             self.unfinished_tasks -= 1
-            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
-            elapse = time.time() - create_time
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
             create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, sid=sid, 
-                version=version, status=status, 
-                elapse=elapse, priority=priority, 
-                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
-                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
+            _print('', tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
         if self.unfinished_tasks < 1:
             Queue.conditions[self.tube]['event'].set()
 

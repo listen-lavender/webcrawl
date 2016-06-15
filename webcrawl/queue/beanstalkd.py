@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-
+import time
 import heapq
 import beanstalkc
 import threading
@@ -48,16 +48,16 @@ class Queue(object):
             for item in items:
                 self.put(item)
 
-    def funid(self, methodName, methodId=None):
-        if methodId is None:
-            return Queue.funids[fid(methodName)]
+    def funid(self, name, mid=None):
+        if mid is None:
+            return Queue.funids[fid(name)]
         else:
-            Queue.funids[fid(methodName)] = methodId
+            Queue.funids[fid(name)] = mid
 
     def put(self, item):
-        priority, methodName, times, args, kwargs, tid, sid, version = item
-        self.bc.put(pickle.dumps({'priority': priority, 'methodName':methodName,
-                                'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'sid':sid, 'version':version}), priority=priority)
+        priority, name, times, args, kwargs, tid, ssid, version = item
+        self.bc.put(pickle.dumps({'priority': priority, 'name':name,
+                                'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'ssid':ssid, 'version':version}), priority=priority)
         Queue.conditions[self.tube]['event'].clear()
 
     def get(self, block=True, timeout=0):
@@ -65,7 +65,7 @@ class Queue(object):
         if item:
             item.delete()
             item = pickle.loads(item.body)
-            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['sid'], item['version']
+            return item['priority'], self.funid(item['name']), item['name'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['ssid'], item['version']
         else:
             return None
 
@@ -77,28 +77,24 @@ class Queue(object):
 
     def task_done(self, item, force=False):
         if item is not None:
-            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
-            elapse = time.time() - create_time
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
             create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, sid=sid, 
-                version=version, status=status, 
-                elapse=elapse, priority=priority, 
-                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
-                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
+            _print('', tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
         if self.empty() or force:
             # if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()
 
     def task_skip(self, item):
         if item is not None:
-            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
-            elapse = time.time() - create_time
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
             create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, sid=sid, 
-                version=version, status=status, 
-                elapse=elapse, priority=priority, 
-                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
-                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
+            _print('', tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
         if self.empty():
             # if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()

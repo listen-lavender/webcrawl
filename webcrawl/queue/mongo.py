@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-
+import time
 import heapq
 import pymongo
 import threading
@@ -48,19 +48,19 @@ class Queue(object):
             for item in items:
                 self.put(item)
 
-    def funid(self, methodName, methodId=None):
-        if methodId is None:
-            return self.mc['%s_funid' % self.tube].find_one({'methodName':fid(methodName)})['methodId']
+    def funid(self, name, mid=None):
+        if mid is None:
+            return self.mc['%s_funid' % self.tube].find_one({'name':fid(name)})['mid']
         else:
-            self.mc['%s_funid' % self.tube].update({'methodName':fid(methodName)}, {'$set':{'methodId':methodId, 'methodName':fid(methodName)}}, upsert=True)
+            self.mc['%s_funid' % self.tube].update({'name':fid(name)}, {'$set':{'mid':mid, 'name':fid(name)}}, upsert=True)
 
     def put(self, item):
-        priority, methodName, times, args, kwargs, tid, sid, version = item
-        sid = sid or str(ObjectId())
-        txt = pickle.dumps({'priority': priority, 'methodName':methodName, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid})
+        priority, name, times, args, kwargs, tid, ssid, version = item
+        ssid = ssid or str(ObjectId())
+        txt = pickle.dumps({'args': args, 'kwargs': kwargs})
         try:
             status = 2 if times == 0 else 1
-            self.mc[self.tube].insert({'_id':sid, 'priority':priority, 'methodName':methodName, 'status':status, 'times':times, 'deny':[], 'tid':tid, 'txt':txt, 'version':version}, continue_on_error=True)
+            self.mc[self.tube].insert({'_id':ssid, 'priority':priority, 'name':name, 'status':status, 'times':times, 'deny':[], 'tid':tid, 'txt':txt, 'version':version}, continue_on_error=True)
             Queue.conditions[self.tube]['event'].clear()
         except:
             pass
@@ -68,11 +68,15 @@ class Queue(object):
     def get(self, block=True, timeout=0):
         item = self.mc[self.tube].find_one_and_update({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[]}, 'status':{'$in':[2, 1]}}, {'$set':{'status':3}}, sort=[('priority', 1)])
         if item:
+            name = item['name']
+            priority = item['priority']
+            times = item['times']
+            tid = item['tid']
             _id = item['_id']
             version = item['version']
             item = item['txt'].encode('utf-8')
             item = pickle.loads(item)
-            return item['priority'], self.funid(item['methodName']), item['methodName'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], _id, version
+            return priority, self.funid(name), name, times, tuple(item['args']), item['kwargs'], tid, _id, version
         else:
             return None
 
@@ -84,29 +88,25 @@ class Queue(object):
 
     def task_done(self, item, force=False):
         if item is not None:
-            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
-            elapse = time.time() - create_time
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
             create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, sid=sid, 
-                version=version, status=status, 
-                elapse=elapse, priority=priority, 
-                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
-                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
-            self.mc[self.tube].update({'_id':sid}, {'$set':{'status':0}})
+            _print('', tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
+            self.mc[self.tube].update({'_id':ssid}, {'$set':{'status':0}})
         if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()
 
     def task_skip(self, item):
         if item is not None:
-            tid, sid, version, status, priority, times, args, kwargs, txt, create_time = item
-            elapse = time.time() - create_time
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
             create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, sid=sid, 
-                version=version, status=status, 
-                elapse=elapse, priority=priority, 
-                times=times, args='(%s)' % ', '.join([str(one) for one in args]), 
-                kwargs=json.dumps(kwargs, ensure_ascii=False), txt=txt)
-            self.mc[self.tube].update({'_id':sid}, {'$set':{'status':-1}})
+            _print('', tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
+            self.mc[self.tube].update({'_id':ssid}, {'$set':{'status':-1}})
         if self.empty():
             Queue.conditions[self.tube]['event'].set()
 
@@ -121,8 +121,8 @@ class Queue(object):
         total = self.mc[self.tube].find({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[], 'status':{'$in':[3, 2, 1]}}}).count()
         return total
 
-    def abandon(self, sid):
-        self.mc[self.tube].update({'_id':sid}, {'$set':{'status':-2}})
+    def abandon(self, ssid):
+        self.mc[self.tube].update({'_id':ssid}, {'$set':{'status':-2}})
 
     def query_do(self, skip=0, limit=10):
         result = list(self.mc[self.tube].find({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[], 'status':{'$in':[2, 1]}}}, skip=skip, limit=limit))
