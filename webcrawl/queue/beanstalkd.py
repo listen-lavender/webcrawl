@@ -9,23 +9,6 @@ import cPickle as pickle
 from ..character import unicode2utf8, json
 from . import fid
 
-try:
-    from kokolog.aboutfile import modulename, modulepath
-    from kokolog.prettyprint import logprint
-except:
-    def modulename(n):
-        return None
-
-    def modulepath(p):
-        return None
-
-    def logprint(n, p):
-        def _wraper(*args, **kwargs):
-            pass
-        return _wraper, None
-
-_print, logger = logprint(modulename(__file__), modulepath(__file__))
-
 DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETRY', 5:'ABANDONED'}
 
 
@@ -76,25 +59,11 @@ class Queue(object):
         pass
 
     def task_done(self, item, force=False):
-        if item is not None:
-            tid, ssid, status, txt, create_time = item
-            elapse = round(time.time() - create_time, 2)
-            create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, ssid=ssid, 
-                status=status, elapse=elapse, 
-                txt=txt, create_time=create_time)
         if self.empty() or force:
             # if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()
 
     def task_skip(self, item):
-        if item is not None:
-            tid, ssid, status, txt, create_time = item
-            elapse = round(time.time() - create_time, 2)
-            create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
-            _print('', tid=tid, ssid=ssid, 
-                status=status, elapse=elapse, 
-                txt=txt, create_time=create_time)
         if self.empty():
             # if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()

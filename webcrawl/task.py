@@ -45,24 +45,6 @@ def patch_thread(threading=True, _threading_local=True, Queue=True, Event=False)
 
 monkey.patch_thread = patch_thread
 
-try:
-    from kokolog.aboutfile import modulename, modulepath
-    from kokolog.prettyprint import logprint
-except:
-    def modulename(n):
-        return None
-
-    def modulepath(p):
-        return None
-
-    def logprint(n, p):
-        def _wraper(*args, **kwargs):
-            pass
-        return _wraper, None
-
-_print, logger = logprint(modulename(__file__), modulepath(__file__))
-
-
 RETRY = 0
 TIMELIMIT = 0
 

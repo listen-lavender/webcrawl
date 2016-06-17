@@ -14,3 +14,11 @@ class MyLocal(object):
 
     def update(self, **kwargs):
         self.__dict__.update(**kwargs)
+
+
+class Logger(object):
+
+    @classmethod
+    def _print(self, **kwargs):
+        for key in kwargs:
+            print key, ': ', kwargs[key]
