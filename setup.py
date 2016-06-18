@@ -18,12 +18,10 @@ install_requires = [
     'gitpython', # 0.3.2.RC1
     'gitdb', # 0.5.4
     'chardet',
-    'PIL',
     'gevent',
     'pycrypto',
     'redis',
-    'beanstalkc',
-    'kokolog',
+    'beanstalkc'
     ]
 
 webcrawl = __import__('webcrawl')
