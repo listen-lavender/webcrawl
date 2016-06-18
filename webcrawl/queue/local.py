@@ -7,6 +7,7 @@ import cPickle as pickle
 from bson import ObjectId
 
 import lib
+from .. import Logger
 from ..character import unicode2utf8, json
 from . import fid
 
@@ -84,6 +85,13 @@ def Queue():
                 self.all_tasks_done.release()
 
     def task_skip(self, item):
+        if item is not None:
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
+            create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
+            self._print(tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
         if self.is_patch:
             # if self.unfinished_tasks <= 0:
             #     raise ValueError('task_done() called too many times')
@@ -120,7 +128,7 @@ def Queue():
     def collect(self):
         pass
 
-    PriorityQueue = type('PriorityQueue', (lib.queue.Queue, ), {'__init__':__init__, 
+    PriorityQueue = type('PriorityQueue', (lib.queue.Queue, Logger), {'__init__':__init__, 
         '_init':_init, 'funid':funid, '_put':_put, '_get':_get, 'task_done':task_done, 'task_skip':task_skip, 'join':join, 'rank':rank, 'collect':collect})
     PriorityQueue.funids = {}
 

@@ -6,13 +6,14 @@ import beanstalkc
 import threading
 import cPickle as pickle
 
+from .. import Logger
 from ..character import unicode2utf8, json
 from . import fid
 
 DESCRIBE = {0:'ERROR', 1:'COMPLETED', 2:'WAIT', 'READY':10, 3:'RUNNING', 4:'RETRY', 5:'ABANDONED'}
 
 
-class Queue(object):
+class Queue(Logger):
     conditions = {}
     funids = {}
 
@@ -64,6 +65,13 @@ class Queue(object):
             Queue.conditions[self.tube]['event'].set()
 
     def task_skip(self, item):
+        if item is not None:
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
+            create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
+            self._print(tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
         if self.empty():
             # if self.empty() or force:
             Queue.conditions[self.tube]['event'].set()

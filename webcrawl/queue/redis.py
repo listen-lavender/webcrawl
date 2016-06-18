@@ -7,10 +7,11 @@ import cPickle as pickle
 from bson import ObjectId
 
 from lib import redis
+from .. import Logger
 from ..character import unicode2utf8, json
 from . import fid
 
-class Queue(object):
+class Queue(Logger):
     conditions = {}
 
     def __init__(self, host='localhost', port=6379, db=0, tube='', timeout=30, items=None, unfinished_tasks=0, init=True, weight=[]):
@@ -71,6 +72,13 @@ class Queue(object):
             Queue.conditions[self.tube]['event'].set()
 
     def task_skip(self, item):
+        if item is not None:
+            tid, ssid, status, txt, create_time = item
+            elapse = round(time.time() - create_time, 2)
+            create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(create_time))
+            self._print(tid=tid, ssid=ssid, 
+                status=status, elapse=elapse, 
+                txt=txt, create_time=create_time)
         if self.unfinished_tasks < 1:
             Queue.conditions[self.tube]['event'].set()
 
