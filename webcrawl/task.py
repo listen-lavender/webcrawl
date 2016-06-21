@@ -194,14 +194,14 @@ class Nevertimeout(object):
         pass
 
 
-def generateId(method, args, kwargs, times):
+def generateId(tid, method, args, kwargs, times):
     ssid = ''
     for key in getattr(method, 'unique', []):
         if type(key) == int:
             ssid += str(args[key])
         else:
             ssid += str(kwargs[key])
-    ssid = hashlib.md5('%s%s%s%s' % (str(getattr(method, 'aid', '')), str(getattr(method, 'sid', '')), ssid, str(times))).hexdigest() if ssid else None
+    ssid = hashlib.md5('%s%s%s' % (str(tid), ssid, str(times))).hexdigest() if ssid else None
     return ssid
 
 def handleIndex(workqueue, result, method, args, kwargs, priority, name, times, tid, version):
@@ -218,7 +218,7 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, name, times, 
                 kwargs, **{method.index: index})
         else:
             raise "Incorrect arguments."
-        ssid = generateId(method, args, kwargs, times)
+        ssid = generateId(tid, method, args, kwargs, times)
         workqueue.put((priority, name, 0, indexargs, indexkwargs, tid, ssid, version))
 
 
@@ -227,24 +227,24 @@ def handleNextStore(workqueue, retvar, method, tid, version, hasnext=False, hass
         pass
     elif type(retvar) == dict:
         if hasnext:
-            ssid = generateId(method.next, (), retvar, 0)
+            ssid = generateId(tid, method.next, (), retvar, 0)
             workqueue.put((method.next.priority, callpath(method.next), 0, (), retvar, tid, ssid, version))
         if hasstore:
-            ssid = generateId(method.store, (), retvar, 0)
+            ssid = generateId(tid, method.store, (), retvar, 0)
             workqueue.put((method.store.priority, callpath(method.store), 0, (), {'obj':retvar}, tid, ssid, version))
     elif type(retvar) == tuple:
         if hasnext:
-            ssid = generateId(method.next, retvar, {}, 0)
+            ssid = generateId(tid, method.next, retvar, {}, 0)
             workqueue.put((method.next.priority, callpath(method.next), 0, retvar, {}, tid, ssid, version))
         if hasstore:
-            ssid = generateId(method.store, retvar, {}, 0)
+            ssid = generateId(tid, method.store, retvar, {}, 0)
             workqueue.put((method.store.priority, callpath(method.store), 0, (retvar[0],), {}, tid, ssid, version))
     else:
         if hasnext:
-            ssid = generateId(method.next, (retvar,), {}, 0)
+            ssid = generateId(tid, method.next, (retvar,), {}, 0)
             workqueue.put((method.next.priority, callpath(method.next), 0, (retvar,), {}, tid, ssid, version))
         if hasstore:
-            ssid = generateId(method.store, (retvar,), {}, 0)
+            ssid = generateId(tid, method.store, (retvar,), {}, 0)
             workqueue.put((method.store.priority, callpath(method.store), 0, (retvar,), {}, tid, ssid, version))
         # raise "Incorrect result for next function."
 
@@ -252,7 +252,7 @@ def handleNextStore(workqueue, retvar, method, tid, version, hasnext=False, hass
 def handleExcept(workqueue, method, args, kwargs, priority, name, times, tid, ssid, version, create_time, count='FAIL'):
     if times < method.retry:
         times = times + 1
-        ssid = generateId(method, args, kwargs, times)
+        ssid = generateId(tid, method, args, kwargs, times)
         workqueue.put((priority, name, times, args, kwargs, tid, ssid, version))
     else:
         setattr(method, count, getattr(method, count.lower())+1)
@@ -341,7 +341,7 @@ class Workflows(object):
         任务流
     """
 
-    def __init__(self, worknum, queuetype, worktype, tid=0, settings={}):
+    def __init__(self, worknum, queuetype, worktype, tid='', settings={}):
         if worktype == 'COROUTINE':
             monkey.patch_all(Event=True)
             gid = threading._get_ident()
@@ -507,7 +507,7 @@ class Workflows(object):
             except:
                 print 'Flow %s has no %d steps.' % (flow, step)
             else:
-                ssid = generateId(it, args, kwargs, 0)
+                ssid = generateId(self.tid, it, args, kwargs, 0)
                 self.queue.put((it.priority, callpath(it), 0, args, kwargs, str(self.tid), ssid, version))
                 self.queue.funid(callpath(it), id(it))
                 if hasattr(it, 'store'):
@@ -559,7 +559,7 @@ class Workflows(object):
             self.queue.funid(callpath(it), id(it))
             if hasattr(it, 'store'):
                 self.queue.funid(callpath(it.store), id(it.store))
-        ssid = generateId(it, args, kwargs, 0)
+        ssid = generateId(tid, it, args, kwargs, 0)
         self.queue.put((section.priority, callpath(section), 0, args, kwargs, str(tid), ssid, version))
 
     def __str__(self):
