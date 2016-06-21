@@ -33,7 +33,7 @@ class URLParse(object):
     @classmethod
     def decode(cls, url):
         urlobj = urlparse.urlparse(url)
-        params_dict = urlparse.parse_qs(urlobj.query)
+        params_dict = urlparse.parse_qs(urlobj.query, keep_blank_values=1)
         for key in params_dict:
             if len(params_dict[key]) == 1:
                 params_dict[key] = params_dict[key][0]

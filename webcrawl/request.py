@@ -22,9 +22,10 @@ from exception import URLFailureException, MarktypeError, FormatError, ArgumentE
 try:
     import Image
 except:
-    from PIL import Image
-except:
-    print "You need install PIL library, from http://www.pythonware.com/products/pil/."
+    try:
+        from PIL import Image
+    except:
+        print "You need install PIL library, from http://www.pythonware.com/products/pil/."
 
 
 REQU = MyLocal(timeout=30)
