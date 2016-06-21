@@ -22,3 +22,8 @@ class Logger(object):
     def _print(self, **kwargs):
         for key in kwargs:
             print key, ': ', kwargs[key]
+
+
+def maskid(ssid, threadid):
+    ssid = hashlib.md5('%s%s' % (str(ssid), str(threadid))).hexdigest()
+    return ssid

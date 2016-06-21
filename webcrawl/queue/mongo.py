@@ -7,7 +7,7 @@ import threading
 import cPickle as pickle
 from bson import ObjectId
 
-from .. import Logger
+from .. import Logger, maskid
 from ..character import unicode2utf8, json
 from . import fid
 
@@ -40,7 +40,7 @@ class Queue(Logger):
 
     def put(self, item):
         priority, name, times, args, kwargs, tid, ssid, version = item
-        ssid = ssid or str(ObjectId())
+        ssid = ssid or maskid(ObjectId(), threading._get_ident())
         txt = pickle.dumps({'args': args, 'kwargs': kwargs})
         try:
             status = 2 if times == 0 else 1
