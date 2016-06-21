@@ -15,6 +15,7 @@ import ctypes
 from . import MyLocal
 MTID = threading._get_ident()  # id of main thread
 from gevent import monkey, Timeout
+from bson import ObjectId
 
 from queue.mongo import Queue as MongoQueue
 from queue.redis import Queue as RedisQueue
@@ -193,7 +194,6 @@ class Nevertimeout(object):
     def cancel(self):
         pass
 
-
 def generateid(tid, method, args, kwargs, times):
     ssid = ''
     for key in getattr(method, 'unique', []):
@@ -201,7 +201,13 @@ def generateid(tid, method, args, kwargs, times):
             ssid += str(args[key])
         else:
             ssid += str(kwargs[key])
-    ssid = hashlib.md5('%s%s%s' % (str(tid), ssid, str(times))).hexdigest() if ssid else None
+    if ssid:
+        ssid = hashlib.md5('%s%s%s' % (str(tid), ssid, str(times))).hexdigest()
+    else:
+        # ssid = ObjectId()
+        # threadid = threading._get_ident()
+        # ssid = hashlib.md5('%s%s%.6f' % (str(ssid), str(threadid), time.time())).hexdigest()
+        ssid = str(ObjectId())
     return ssid
 
 def handleIndex(workqueue, result, method, args, kwargs, priority, name, times, tid, version):
@@ -254,12 +260,12 @@ def handleExcept(workqueue, method, args, kwargs, priority, name, times, tid, ss
         times = times + 1
         ssid = generateid(tid, method, args, kwargs, times)
         workqueue.put((priority, name, times, args, kwargs, tid, ssid, version))
-    else:
-        setattr(method, count, getattr(method, count.lower())+1)
-        t, v, b = sys.exc_info()
-        err_messages = traceback.format_exception(t, v, b)
-        txt = ','.join(err_messages)
-        workqueue.task_skip((tid, ssid, count, txt, create_time))
+        
+    setattr(method, count, getattr(method, count.lower())+1)
+    t, v, b = sys.exc_info()
+    err_messages = traceback.format_exception(t, v, b)
+    txt = ','.join(err_messages)
+    workqueue.task_skip((tid, ssid, count, txt, create_time))
 
 
 def geventwork(workqueue):
@@ -282,19 +288,12 @@ def geventwork(workqueue):
                 if result is None:
                     method.succ = method.succ + 1
                 elif isinstance(result, types.GeneratorType):
-                    try:
-                        hasattr(method, 'index') and handleIndex(
-                            workqueue, result, method, args, kwargs, priority, name, times, tid, version)
-                        for retvar in result:
-                            handleNextStore(
-                                workqueue, retvar, method, tid, version, hasattr(method, 'next'), hasattr(method, 'store'))
-                        method.succ = method.succ + 1
-                    except TimeoutError:
-                        handleExcept(
-                            workqueue, method, args, kwargs, priority, name, times, tid, ssid, version, create_time, 'TIMEOUT')
-                    except:
-                        handleExcept(
-                            workqueue, method, args, kwargs, priority, name, times, tid, ssid, version, create_time, 'FAIL')
+                    hasattr(method, 'index') and handleIndex(
+                        workqueue, result, method, args, kwargs, priority, name, times, tid, version)
+                    for retvar in result:
+                        handleNextStore(
+                            workqueue, retvar, method, tid, version, hasattr(method, 'next'), hasattr(method, 'store'))
+                    method.succ = method.succ + 1
                 else:
                     handleNextStore(
                         workqueue, result, method, tid, version, hasattr(method, 'next'), hasattr(method, 'store'))
@@ -305,8 +304,9 @@ def geventwork(workqueue):
             except:
                 handleExcept(
                     workqueue, method, args, kwargs, priority, name, times, tid, ssid, version, create_time, 'FAIL')
-            finally:
+            else:
                 workqueue.task_done((tid, ssid, 'SUCC', None, create_time))
+            finally:
                 timer.cancel()
                 del timer
 

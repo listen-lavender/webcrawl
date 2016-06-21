@@ -5,9 +5,6 @@ __import__('pkg_resources').declare_namespace(__name__)
 __version__ = '0.0.2'
 __author__ = 'hk'
 
-import hashlib
-
-
 class MyLocal(object):
 
     def __init__(self, **kwargs):
@@ -24,8 +21,3 @@ class Logger(object):
     def _print(self, **kwargs):
         for key in kwargs:
             print key, ': ', kwargs[key]
-
-
-def maskid(ssid, threadid):
-    ssid = hashlib.md5('%s%s' % (str(ssid), str(threadid))).hexdigest()
-    return ssid
