@@ -45,7 +45,7 @@ def patch_thread(threading=True, _threading_local=True, Queue=True, Event=False)
         _threading_local.local = local
 
 monkey.patch_thread = patch_thread
-
+SPACE = 100
 RETRY = 0
 TIMELIMIT = 0
 
@@ -179,7 +179,7 @@ def priority(level=0):
     return wrap
 
 
-def switch(space=100):
+def switch(space=SPACE):
     def wrap(fun):
         fun.space = 100
 
@@ -189,15 +189,6 @@ def switch(space=100):
         return wrapped
     return wrap
 
-
-def assure(method):
-    method.succ = 0
-    method.fail = 0
-    method.timeout = 0
-    not hasattr(method, 'retry') and setattr(method, 'retry', RETRY)
-    not hasattr(method, 'timelimit') and setattr(method, 'timelimit', TIMELIMIT)
-    not hasattr(method, 'priority') and setattr(method, 'priority', None)
-    not hasattr(method, 'space') and setattr(method, 'space', 1)
 
 class Nevertimeout(object):
 
@@ -460,13 +451,13 @@ class Workflows(object):
             b.timeout = 0
             hasattr(p, 'index') and setattr(b, 'index', p.index)
             hasattr(p, 'unique') and setattr(b, 'unique', p.unique)
-            hasattr(p, 'space') and setattr(b, 'space', p.space)
+            setattr(b, 'space', (hasattr(b, 'space') and getattr(p, 'space')) or 1)
             setattr(b, 'clspath', str(self))
             hasattr(p, 'store') and setattr(b, 'store', p.store)
             hasattr(p, 'store') and setattr(b.store, 'clspath', str(self))
-            b.retry = (hasattr(p, 'retry') and p.retry) or RETRY
-            b.timelimit = (hasattr(p, 'timelimit') and p.timelimit) or TIMELIMIT
-            b.priority = (hasattr(p, 'priority') and p.priority) or None
+            setattr(b, 'retry', (hasattr(b, 'retry') and getattr(p, 'retry')) or RETRY)
+            setattr(b, 'timelimit', (hasattr(b, 'timelimit') and getattr(p, 'timelimit')) or TIMELIMIT)
+            setattr(b, 'priority', (hasattr(b, 'priority') and getattr(p, 'priority')) or None)
         if self.__flowcount['inner']:
             print "Inner workflow can be set once and has been set."
         else:
