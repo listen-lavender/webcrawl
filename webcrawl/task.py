@@ -88,14 +88,15 @@ def unique(keys):
     return wrap
 
 
-def store(db, way, update=None, method=None):
+def store(db, way, update=None, method=None, priority=0, space=1):
     def wrap(fun):
         if way is not None:
             fun.store = functools.partial(db(way), update=update, method=method)
             fun.store.__name__ = 'store' + way.im_self.__name__
             fun.store.retry = RETRY
             fun.store.timelimit = TIMELIMIT
-            fun.store.priority = 0
+            fun.store.priority = priority
+            fun.store.space = space
             fun.store.succ = 0
             fun.store.fail = 0
             fun.store.timeout = 0
@@ -178,6 +179,17 @@ def priority(level=0):
     return wrap
 
 
+def switch(space=100):
+    def wrap(fun):
+        fun.space = 100
+
+        @functools.wraps(fun)
+        def wrapped(*args, **kwargs):
+            return fun(*args, **kwargs)
+        return wrapped
+    return wrap
+
+
 def assure(method):
     method.succ = 0
     method.fail = 0
@@ -185,6 +197,7 @@ def assure(method):
     not hasattr(method, 'retry') and setattr(method, 'retry', RETRY)
     not hasattr(method, 'timelimit') and setattr(method, 'timelimit', TIMELIMIT)
     not hasattr(method, 'priority') and setattr(method, 'priority', None)
+    not hasattr(method, 'space') and setattr(method, 'space', 1)
 
 class Nevertimeout(object):
 
@@ -228,30 +241,36 @@ def handleIndex(workqueue, result, method, args, kwargs, priority, name, times, 
         workqueue.put((priority, name, 0, indexargs, indexkwargs, tid, ssid, version))
 
 
-def handleNextStore(workqueue, retvar, method, tid, version, hasnext=False, hasstore=False):
+def handleNextStore(workqueue, retvar, method, tid, version, hasnext=False, hasstore=False, serialno=0):
     if retvar is None:
         pass
     elif type(retvar) == dict:
         if hasnext:
             ssid = generateid(tid, method.next, (), retvar, 0)
-            workqueue.put((method.next.priority, callpath(method.next), 0, (), retvar, tid, ssid, version))
+            priority = method.next.priority * method.next.space + serialno
+            workqueue.put((priority, callpath(method.next), 0, (), retvar, tid, ssid, version))
         if hasstore:
             ssid = generateid(tid, method.store, (), retvar, 0)
-            workqueue.put((method.store.priority, callpath(method.store), 0, (), {'obj':retvar}, tid, ssid, version))
+            priority = method.store.priority * method.store.space + serialno
+            workqueue.put((priority, callpath(method.store), 0, (), {'obj':retvar}, tid, ssid, version))
     elif type(retvar) == tuple:
         if hasnext:
             ssid = generateid(tid, method.next, retvar, {}, 0)
-            workqueue.put((method.next.priority, callpath(method.next), 0, retvar, {}, tid, ssid, version))
+            priority = method.next.priority * method.next.space + serialno
+            workqueue.put((priority, callpath(method.next), 0, retvar, {}, tid, ssid, version))
         if hasstore:
             ssid = generateid(tid, method.store, retvar, {}, 0)
-            workqueue.put((method.store.priority, callpath(method.store), 0, (retvar[0],), {}, tid, ssid, version))
+            priority = method.store.priority * method.store.space + serialno
+            workqueue.put((priority, callpath(method.store), 0, (retvar[0],), {}, tid, ssid, version))
     else:
         if hasnext:
             ssid = generateid(tid, method.next, (retvar,), {}, 0)
-            workqueue.put((method.next.priority, callpath(method.next), 0, (retvar,), {}, tid, ssid, version))
+            priority = method.next.priority * method.next.space + serialno
+            workqueue.put((priority, callpath(method.next), 0, (retvar,), {}, tid, ssid, version))
         if hasstore:
             ssid = generateid(tid, method.store, (retvar,), {}, 0)
-            workqueue.put((method.store.priority, callpath(method.store), 0, (retvar,), {}, tid, ssid, version))
+            priority = method.store.priority * method.store.space + serialno
+            workqueue.put((priority, callpath(method.store), 0, (retvar,), {}, tid, ssid, version))
         # raise "Incorrect result for next function."
 
 
@@ -290,9 +309,11 @@ def geventwork(workqueue):
                 elif isinstance(result, types.GeneratorType):
                     hasattr(method, 'index') and handleIndex(
                         workqueue, result, method, args, kwargs, priority, name, times, tid, version)
+                    serialno = 0
                     for retvar in result:
                         handleNextStore(
-                            workqueue, retvar, method, tid, version, hasattr(method, 'next'), hasattr(method, 'store'))
+                            workqueue, retvar, method, tid, version, hasattr(method, 'next'), hasattr(method, 'store'), serialno)
+                        serialno = serialno + 1
                     method.succ = method.succ + 1
                 else:
                     handleNextStore(
@@ -443,6 +464,7 @@ class Workflows(object):
             b.timeout = 0
             hasattr(p, 'index') and setattr(b, 'index', p.index)
             hasattr(p, 'unique') and setattr(b, 'unique', p.unique)
+            hasattr(p, 'space') and setattr(b, 'space', p.space)
             setattr(b, 'clspath', str(self))
             hasattr(p, 'store') and setattr(b, 'store', p.store)
             hasattr(p, 'store') and setattr(b.store, 'clspath', str(self))
@@ -508,7 +530,7 @@ class Workflows(object):
                 print 'Flow %s has no %d steps.' % (flow, step)
             else:
                 ssid = generateid(self.tid, it, args, kwargs, 0)
-                self.queue.put((it.priority, callpath(it), 0, args, kwargs, str(self.tid), ssid, version))
+                self.queue.put((it.priority * it.space, callpath(it), 0, args, kwargs, str(self.tid), ssid, version))
                 self.queue.funid(callpath(it), id(it))
                 if hasattr(it, 'store'):
                     self.queue.funid(callpath(it.store), id(it.store))
@@ -560,7 +582,7 @@ class Workflows(object):
             if hasattr(it, 'store'):
                 self.queue.funid(callpath(it.store), id(it.store))
         ssid = generateid(tid, it, args, kwargs, 0)
-        self.queue.put((section.priority, callpath(section), 0, args, kwargs, str(tid), ssid, version))
+        self.queue.put((section.priority * section.space, callpath(section), 0, args, kwargs, str(tid), ssid, version))
 
     def __str__(self):
         desc = object.__str__(self)
