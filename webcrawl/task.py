@@ -434,19 +434,15 @@ class Workflows(object):
     def tinder(self, flow):
         return self.__flows[flow]['tinder']
 
-    def select(self, flow, step=0, sid=[]):
+    def select(self, flow, step=0):
         section = None
         index = 0
         it = self.__flows.get(flow, {'tinder':None})['tinder']
-        if index < len(sid):
-            setattr(it, 'sid', sid[index])
         if step == index:
             section = it
         while hasattr(it, 'next'):
             it = it.next
             index = index + 1
-            if index < len(sid):
-                setattr(it, 'sid', sid[index])
             if step == index:
                 section = it
         return section
