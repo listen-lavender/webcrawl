@@ -108,14 +108,6 @@ def store(db, way, update=None, method=None, priority=0, space=1):
     return wrap
 
 
-def hashweb():
-    def wrap(fun):
-        @functools.wraps(fun)
-        def wrapped(*args, **kwargs):
-            return fun(*args, **kwargs)
-        return wrapped
-    return wrap
-
 def retry(num=1):
     def wrap(fun):
         fun.retry = num

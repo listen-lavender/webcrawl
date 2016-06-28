@@ -11,6 +11,7 @@ import StringIO
 import functools
 import threading
 import time
+from requests import Session
 
 from queue.lib.queue import Queue
 from lxml import etree as ET
