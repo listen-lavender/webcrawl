@@ -279,9 +279,10 @@ def treeXml(content, coding='unicode'):
     """
     return tree(content, coding, 'XML')
 
-def clean(node, isroot, style=True, scripts=True, meta=True, page_structure=True, safe_attrs_only=True, safe_attrs=frozenset(['src']), allow_tags=None, kill_tags=None, remove_tags=None, remove_unknown_tags=True):
+def clean(node, isroot, style=True, javascript=True, scripts=True, meta=True, page_structure=True, safe_attrs_only=True, safe_attrs=frozenset(['src']), allow_tags=None, kill_tags=None, remove_tags=None, remove_unknown_tags=True):
     content = HT.tostring(node, encoding='utf-8')
     HtmlCleaner.cfg.style = style
+    HtmlCleaner.cfg.javascript = javascript
     HtmlCleaner.cfg.scripts = scripts
     HtmlCleaner.cfg.meta = meta
     HtmlCleaner.cfg.page_structure = page_structure
@@ -291,6 +292,17 @@ def clean(node, isroot, style=True, scripts=True, meta=True, page_structure=True
     HtmlCleaner.cfg.kill_tags = kill_tags
     HtmlCleaner.cfg.remove_tags = remove_tags
     HtmlCleaner.cfg.remove_unknown_tags = remove_unknown_tags
+
+    HtmlCleaner.cfg.comments = True
+    HtmlCleaner.cfg.links = True
+    HtmlCleaner.cfg.processing_instructions = True
+    HtmlCleaner.cfg.embedded = True
+    HtmlCleaner.cfg.frames = True
+    HtmlCleaner.cfg.forms = True
+    HtmlCleaner.cfg.annoying_tags = True
+    HtmlCleaner.cfg.add_nofollow = False
+    HtmlCleaner.cfg.host_whitelist = ()
+    HtmlCleaner.cfg.whitelist_tags = set(['iframe', 'embed'])
     if isroot:
         content = _cleaner.clean_html(content)
     else:
