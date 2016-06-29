@@ -18,6 +18,7 @@ from lxml import etree as ET
 from lxml import html as HT
 from character import unicode2utf8
 from . import MyLocal
+from lxmlclean import HtmlCleaner
 from exception import URLFailureException, MarktypeError, FormatError, ArgumentError
 
 try:
@@ -34,6 +35,8 @@ REQU = MyLocal(timeout=30)
 PROXY = MyLocal(url='', queue=Queue(), choose=lambda :[], log=lambda pid, elapse:None, use=False, worker=None)
 
 FILE = MyLocal(make=True, dir='')
+
+_cleaner = HtmlCleaner()
 
 class Proxyworker(threading.Thread):
 
@@ -275,6 +278,24 @@ def treeXml(content, coding='unicode'):
     """
     """
     return tree(content, coding, 'XML')
+
+def clean(node, isroot, style=True, scripts=True, meta=True, page_structure=True, safe_attrs_only=True, safe_attrs=frozenset(['src']), allow_tags=None, kill_tags=None, remove_tags=None, remove_unknown_tags=True):
+    content = HT.tostring(node, encoding='utf-8')
+    HtmlCleaner.cfg.style = style
+    HtmlCleaner.cfg.scripts = scripts
+    HtmlCleaner.cfg.meta = meta
+    HtmlCleaner.cfg.page_structure = page_structure
+    HtmlCleaner.cfg.safe_attrs_only = safe_attrs_only
+    HtmlCleaner.cfg.safe_attrs = safe_attrs
+    HtmlCleaner.cfg.allow_tags = allow_tags
+    HtmlCleaner.cfg.kill_tags = kill_tags
+    HtmlCleaner.cfg.remove_tags = remove_tags
+    HtmlCleaner.cfg.remove_unknown_tags = remove_unknown_tags
+    if isroot:
+        content = _cleaner.clean_html(content)
+    else:
+        content = _cleaner.clean_html('<html><head><meta http-equiv="Content-type" content="text/html; charset=utf-8"></head><body>' + content + '</body>')
+    return content.replace('<div><body>', '').replace('</body></div>', '')
     
 
 if __name__ == '__main__':
