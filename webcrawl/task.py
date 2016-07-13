@@ -448,7 +448,7 @@ class Workflows(object):
             except:
                 print 'Flow %s has no %d steps.' % (flow, step)
             else:
-                ssid = generateid(self.tid, it, args, kwargs, 0)
+                ssid = generateid(self.tid, args, kwargs, 0, it.unique)
                 self.queue.put((it.priority * it.space, it.name, 0, args, kwargs, str(self.tid), ssid, version))
                 for worker in self.workers:
                     worker.setDaemon(True)
@@ -486,7 +486,7 @@ class Workflows(object):
             self.queue.funid(it.name, id(it))
             if hasattr(it, 'store'):
                 self.queue.funid(callpath(it.store), id(it.store))
-        ssid = generateid(tid, it, args, kwargs, 0)
+        ssid = generateid(tid, args, kwargs, 0, it.unique)
         self.queue.put((section.priority * section.space, callpath(section), 0, args, kwargs, str(tid), ssid, version))
 
     def __str__(self):
