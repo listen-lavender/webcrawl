@@ -168,14 +168,4 @@ def calcDistance(lat1, lon1, lat2, lon2):
     return s
 
 if __name__ == '__main__':
-    print 'start...'
-    print decodeMapabcLatLnt('JIMMRTOVLTDDLD')
-    print decodeMapabcLatLnt('LHGUQTOPLHHL')
-    lat1, lon1 = 39.908331013, 116.304654479
-    lat2, lon2 = 39.907508, 116.310256
-    lat3, lon3 = 32.04038766950357, 118.76734303236003
-    lat4, lon4 = 32.040404106823594, 118.7672860985213
-    lat3, lon3 = convertBtoG(lat3, lon3)
-    print calcDistance(lat3, lon3, lat4, lon4)  # 1139.07425907
-    print convertBtoG(38.051313000, 114.620741000)
-    print 'end...'
+    pass

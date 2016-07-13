@@ -46,4 +46,4 @@ def modulename(filename):
     return filename.split('/')[-1].replace('.pyc', '').replace('.py', '')
 
 if __name__ == '__main__':
-    print modulepath(__file__)
+    pass

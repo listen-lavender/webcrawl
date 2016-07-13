@@ -299,5 +299,4 @@ def clean(node, isroot, style=True, scripts=True, meta=True, page_structure=True
     
 
 if __name__ == '__main__':
-    print 'start...'
-    print 'end...'
+    pass

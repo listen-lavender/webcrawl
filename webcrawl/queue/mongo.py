@@ -10,7 +10,6 @@ from .. import Logger
 from ..character import unicode2utf8, json
 from . import fid
 
-DESCRIBE = {-2:'ABANDONED', -1:'ERROR', 0:'COMPLETED', 1:'RETRY', 2:'WAIT', 3:'RUNNING'}
 
 class Queue(Logger):
     conditions = {}
