@@ -5,6 +5,32 @@ __import__('pkg_resources').declare_namespace(__name__)
 __version__ = '0.0.2'
 __author__ = 'hk'
 
+DEFAULT = [
+'__call__',
+'__class__',
+'__delattr__',
+'__dict__',
+'__doc__',
+'__format__',
+'__getattribute__',
+'__hash__',
+'__init__',
+'__new__',
+'__reduce__',
+'__reduce_ex__',
+'__repr__',
+'__setattr__',
+'__setstate__',
+'__sizeof__',
+'__str__',
+'__subclasshook__'
+]
+
+SPACE = 100
+RETRY = 0
+TIMELIMIT = 0
+CONTINUOUS = True
+
 class MyLocal(object):
 
     def __init__(self, **kwargs):

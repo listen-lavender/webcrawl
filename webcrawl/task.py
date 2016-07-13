@@ -12,7 +12,7 @@ import weakref
 import gevent
 import functools
 import ctypes
-from . import MyLocal
+from . import DEFAULT, SPACE, RETRY, TIMELIMIT, CONTINUOUS
 MTID = threading._get_ident()  # id of main thread
 from time import sleep
 from gevent import monkey, Timeout
@@ -46,32 +46,6 @@ def patch_thread(threading=True, _threading_local=True, Queue=True, Event=False)
         _threading_local.local = local
 
 monkey.patch_thread = patch_thread
-
-DEFAULT = [
-'__call__',
-'__class__',
-'__delattr__',
-'__dict__',
-'__doc__',
-'__format__',
-'__getattribute__',
-'__hash__',
-'__init__',
-'__new__',
-'__reduce__',
-'__reduce_ex__',
-'__repr__',
-'__setattr__',
-'__setstate__',
-'__sizeof__',
-'__str__',
-'__subclasshook__'
-]
-
-SPACE = 100
-RETRY = 0
-TIMELIMIT = 0
-CONTINUOUS = True
 
 def clone(src, obj, attach={}):
     for attr in dir(src):
