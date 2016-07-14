@@ -15,7 +15,7 @@ class Queue(Logger):
     conditions = {}
     funids = {}
 
-    def __init__(self, host='localhost', port=11300, tube='', timeout=30, items=None, unfinished_tasks=None):
+    def __init__(self, host='localhost', port=11300, tube='', timeout=30, items=None, unfinished_tasks=None, init=True, weight=[]):
         self.bc = beanstalkc.Connection(host, port, connect_timeout=timeout)
         self.tube = 'pholcus_task%s' % tube
         self.bc.use(self.tube)
@@ -24,8 +24,9 @@ class Queue(Logger):
             pass
         else:
             Queue.conditions[self.tube] = {'event': threading.Event()}
-            self.clear()
             Queue.conditions[self.tube]['event'].set()
+        if init:
+            self.clear()
         if items:
             for item in items:
                 self.put(item)

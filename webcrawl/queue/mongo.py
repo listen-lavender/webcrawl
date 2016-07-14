@@ -14,7 +14,7 @@ from . import fid
 class Queue(Logger):
     conditions = {}
 
-    def __init__(self, host='localhost', port=27017, db='pholcus', tube='', timeout=30, items=None, unfinished_tasks=None, init=True):
+    def __init__(self, host='localhost', port=27017, db='pholcus', tube='', timeout=30, items=None, unfinished_tasks=None, init=True, weight=[]):
         self.mc = pymongo.MongoClient(host=host, port=port)[db]
         self.tube = 'task%s' % tube
         self.unfinished_tasks = 0

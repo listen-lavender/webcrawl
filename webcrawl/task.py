@@ -66,6 +66,7 @@ def assure(method, cls, instancemethod=False):
     obj.fail = 0
     obj.timeout = 0
     obj.next = []
+    setattr(obj, 'unique', getattr(obj, 'unique', []))
     setattr(obj, 'params', getattr(obj, 'params', []))
     setattr(obj, 'space', getattr(obj, 'space', SPACE))
     setattr(obj, 'retry', getattr(obj, 'retry', RETRY))
@@ -191,7 +192,7 @@ def switch(space=SPACE):
         return _deco(fun, 'space', space)
     return deco
 
-def store(db, way, update=None, method=None, priority=0, space=1, obj=None):
+def store(db, way, update=None, method=None, priority=1, space=1, obj=None):
     def deco(fun):
         store = functools.partial(db(way), update=update, method=method)
         store.__name__ = 'store_%s' % way.im_class.__name__.lower()
@@ -347,74 +348,36 @@ class Foreverworker(threading.Thread):
 
 class Workflows(object):
 
-    """
-        任务流
-    """
-
     def __init__(self, worknum, queuetype, tid='', settings={}):
         self.__worknum = worknum
         self.__queuetype = queuetype
         self.__flows = {}
+        self.__weight = []
         if not hasattr(self, 'clsname'):
             self.clsname = str(self.__class__).split(".")[-1].replace("'>", "")
 
-        self.queue = None
         self.workers = []
         self.tid = tid
         self.settings = settings
-        
-    def prepare(self, flow=None):
-        self.workers = []
-        weight = []
-        tube = {}
-        if flow:
-            weight = self.weight(flow)
-            self.settings['tube'] = str(id(self))
 
-        try:
-            if self.__queuetype == 'P':
-                self.settings = {}
-                QCLS = LocalQueue
-                # self.queue = LocalQueue()()
-            elif self.__queuetype == 'B':
-                QCLS = BeanstalkdQueue
-                # self.queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
-            elif self.__queuetype == 'R':
-                self.settings['weight'] = weight
-                QCLS = RedisQueue
-                # self.queue = RedisQueue(weight=weight, **dict(DataQueue.redis, **tube))
-            elif self.__queuetype == 'M':
-                QCLS = MongoQueue
-                # self.queue = MongoQueue(**dict(DataQueue.mongo, **tube))
-            else:
-                raise Exception('Error queue type.')
-            self.queue = QCLS(**self.settings)
-        except:
-            print 'Wrong type of queue, please choose P(local queue), B(beanstalkd queue), R(redis queue), M(mongo queue) start your beanstalkd service.'
-
-        for k in range(self.__worknum):
-            if self.__queuetype == 'P':
-                queue = self.queue
-            else:
-                queue = QCLS(**self.settings)
-            worker = Foreverworker(queue)
-            self.workers.append(worker)
-
-    def tinder(self, flow):
-        return self.__flows[flow]['tinder']
-
-    def select(self, flow, step=0):
-        section = None
-        index = 0
-        it = self.__flows.get(flow, {'tinder':None})['tinder']
-        if step == index:
-            section = it
-        while hasattr(it, 'next'):
-            it = it.next
-            index = index + 1
-            if step == index:
-                section = it
-        return section
+        if self.__queuetype == 'P':
+            self.settings = {}
+            QCLS = LocalQueue
+            # self.queue = LocalQueue()()
+        elif self.__queuetype == 'B':
+            QCLS = BeanstalkdQueue
+            # self.queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
+        elif self.__queuetype == 'R':
+            QCLS = RedisQueue
+            # self.queue = RedisQueue(weight=weight, **dict(DataQueue.redis, **tube))
+        elif self.__queuetype == 'M':
+            QCLS = MongoQueue
+            # self.queue = MongoQueue(**dict(DataQueue.mongo, **tube))
+        else:
+            raise Exception('Error queue type.')
+        self.queue = QCLS(**self.settings)
+        self.extract()
+        self.prepare()
 
     def extract(self):
         self.__flows = {}
@@ -431,44 +394,46 @@ class Workflows(object):
             method = getattr(self, attr)
             if hasattr(method, 'priority'):
                 try:
-                    method.priority = self.reversal + 1 - method.priority
+                    method.priority = self.reversal + 2 - method.priority
                 except:
-                    method.__func__.priority = self.reversal + 1 - method.priority
+                    method.__func__.priority = self.reversal + 2 - method.priority
             self.queue.funid(method, id(method))
+            self.__weight.append(method.weight)
             if hasattr(method, 'store'):
                 self.queue.funid(method.store, id(method.store))
+                self.__weight.append(method.store.weight)
 
-    def fire(self, flow, step, version, *args, **kwargs):
-        it = self.__flows.get(flow, {'tinder':None})['tinder']
-        if it is not None:
-            self.prepare(flow)
-            try:
-                for k in range(step):
-                    it = it.next
-            except:
-                print 'Flow %s has no %d steps.' % (flow, step)
+        if self.__weight:
+            self.__weight = list(set(self.__weight))
+            self.__weight.sort()
+        
+    def prepare(self):
+        self.settings['weight'] = self.__weight
+        for k in range(self.__worknum):
+            if self.__queuetype == 'P':
+                queue = self.queue
             else:
-                ssid = generateid(self.tid, args, kwargs, 0, it.unique)
-                self.queue.put((it.priority * it.space, it.name, 0, args, kwargs, str(self.tid), ssid, version))
-                for worker in self.workers:
-                    worker.setDaemon(True)
-                    worker.start()
+                queue = QCLS(**self.settings)
+            worker = Foreverworker(queue)
+            self.workers.append(worker)
+
+    def fire(self, flow, step=None, version=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), *args, **kwargs):
+        if step is None:
+            it = self.__flows[flow]
         else:
-            print 'There is no work flow.'
+            it = Next.footprint['%s.%s' % (str(self), step)]
+        self.prepare(flow)
+        ssid = generateid(self.tid, args, kwargs, 0, it.unique)
+        self.queue.put((it.priority * it.space, it.name, 0, args, kwargs, str(self.tid), ssid, version))
+        for worker in self.workers:
+            worker.setDaemon(True)
+            worker.start()
 
     def exit(self):
         self.queue.task_done(None, force=True)
 
-    def waitComplete(self):
+    def wait(self):
         self.queue.join()
-
-    def weight(self, flow, once=False):
-        if once:
-            self.__flows[flow]['weight']['num'] = self.__flows[flow]['weight']['num'] + 1
-        if once and self.__flows[flow]['weight']['num'] > 1:
-            return []
-        else:
-            return self.__flows[flow]['weight']['levels'][::-1]
 
     def start(self):
         self.prepare()
@@ -476,17 +441,13 @@ class Workflows(object):
             worker.setDaemon(True)
             worker.start()
 
+    def select(self, flow, step=None):
+        if step is None:
+            return self.__flows[flow]
+        return Next.footprint[step]
+
     def task(self, section, tid, version, *args, **kwargs):
-        it = section
-        self.queue.funid(it.name, id(it))
-        if hasattr(it, 'store'):
-            self.queue.funid(callpath(it.store), id(it.store))
-        while hasattr(it, 'next'):
-            it = it.next
-            self.queue.funid(it.name, id(it))
-            if hasattr(it, 'store'):
-                self.queue.funid(callpath(it.store), id(it.store))
-        ssid = generateid(tid, args, kwargs, 0, it.unique)
+        ssid = generateid(tid, args, kwargs, 0, section.unique)
         self.queue.put((section.priority * section.space, callpath(section), 0, args, kwargs, str(tid), ssid, version))
 
     def __str__(self):

@@ -17,7 +17,7 @@ from . import fid
 #         return lib.queue.Queue.__new__(cls)
 class Queue(lib.queue.Queue, Logger):
 
-    def __init__(self, maxsize=None, items=None, unfinished_tasks=None):
+    def __init__(self, maxsize=None, items=None, unfinished_tasks=None, weight=[]):
         self.maxsize = maxsize or 0
         self.items = items
 
