@@ -6,22 +6,23 @@ import threading
 import cPickle as pickle
 from bson import ObjectId
 
-import lib
+from lib import queue
 from .. import Logger
 from ..character import unicode2utf8, json
 from . import fid
 
-# class Queue(lib.queue.Queue):
+# class Queue(queue.Queue):
 
 #     def __new__(cls):
-#         return lib.queue.Queue.__new__(cls)
-class Queue(lib.queue.Queue, Logger):
+#         return queue.Queue.__new__(cls)
+class Queue(queue.Queue, Logger):
 
     def __init__(self, maxsize=None, items=None, unfinished_tasks=None, weight=[]):
         self.maxsize = maxsize or 0
         self.items = items
+        self.funids = {}
 
-        self.parent = lib.queue.Queue.__init__(self, maxsize)
+        self.parent = queue.Queue.__init__(self, maxsize)
 
         if unfinished_tasks:
             self.unfinished_tasks = unfinished_tasks

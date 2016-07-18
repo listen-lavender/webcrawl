@@ -59,6 +59,7 @@ def assure(method, cls, instancemethod=False):
     obj = method
     if instancemethod:
         obj = method.__func__
+        setattr(obj, 'rank', getattr(obj, 'rank', 1))
     if hasattr(obj, 'store'):
         obj.store.name = '%s.%s' % (cls, obj.store.__name__)
     obj.next = []
@@ -78,25 +79,52 @@ class Next(object):
     def __init__(self, *next):
         self.next = list(next)
         self.attach = {}
+        self.circle = {
+            'parent_node': None,
+            'child_nodes': []
+        }
 
     def __call__(self, curr):
         self.curr = curr
-        self.priority = getattr(curr, 'priority', self.attach.get('priority', 1))
+        self.attach = {}
+        self.rank = 1
         self.__name__ = curr.__name__
         if self.__name__ in self.next:
             self.next.remove(self.__name__)
         return self
 
-    def update_priority(self, cls, base=0):
-        self.priority = self.priority + base
-        cls.reversal = max(self.priority, cls.reversal)
+    def update_rank(self, cls, obj, base=0, path=[]):
+        if self.__name__ in path:
+            path = path[path.index(self.__name__)+1:]
+            self.circle['child_nodes'] = path
+        else:
+            path.append(self.__name__)
+
+            self.rank = self.rank + base
+            obj.reversal = max(self.rank, obj.reversal)
+
+        for attr in self.circle['child_nodes']:
+            method = cls.__dict__[attr]
+            method.circle['parent_node'] = self.__name__
+            method.rank = 0
+            method.update_rank(cls, obj, base=self.rank, path=[])
+
         for attr in self.next:
             method = cls.__dict__[attr]
-            if hasattr(method, 'update_priority'):
-                method.update_priority(cls, self.priority)
+            child_nodes = getattr(method, 'circle', {'child_nodes':[]})['child_nodes']
+            done = len(child_nodes) > 0
+            done = done and self.__name__ in child_nodes
+            done = done or getattr(method, 'circle', {'parent_node':None})['parent_node'] is not None
+            if done:
+                continue
+
+            next_path = []
+            next_path.extend(path)
+            if hasattr(method, 'update_rank'):
+                method.update_rank(cls, obj, base=self.rank, path=next_path)
             else:
-                method.priority = max(1 + self.priority, getattr(method, 'priority', 1))
-                cls.reversal = max(method.priority, cls.reversal)
+                method.rank = max(1 + self.rank, getattr(method, 'rank', 1))
+                obj.reversal = max(method.rank, obj.reversal)
 
     def __get__(self, obj, cls):
         name = '%s.%s' % (str(obj), self.__name__)
@@ -109,11 +137,12 @@ class Next(object):
 
             self.footprint[name] = curr
 
-        curr.priority = self.priority
+        curr.rank = self.rank
         if curr.next:
             return curr
 
-        self.update_priority(cls)
+        if hasattr(curr, 'label'):
+            self.update_rank(cls, obj, path=[])
 
         for attr in self.next:
             name = '%s.%s' % (str(obj), attr)
@@ -129,7 +158,7 @@ class Next(object):
                 else:
                     next = getattr(obj, attr)
                     next.__func__.name = name
-                    next.__func__.priority = method.priority
+                    next.__func__.rank = getattr(method, 'rank', 1)
                     assure(next, str(obj), instancemethod=True)
 
                 self.footprint[name] = next
@@ -206,7 +235,6 @@ def store(db, way, update=None, method=None, priority=1, space=1, obj=None):
 
         return _deco(fun, 'store', store)
     return deco
-
 
 class Nevertimeout(object):
 
@@ -348,92 +376,103 @@ class Foreverworker(threading.Thread):
 
 class Workflows(object):
 
-    def __init__(self, worknum, queuetype, tid='', settings={}):
+    def __init__(self, worknum, queuetype='P', tid='', settings={}):
         self.__worknum = worknum
         self.__queuetype = queuetype
         self.__flows = {}
-        self.__weight = []
+        self.__weight = {}
         if not hasattr(self, 'clsname'):
             self.clsname = str(self.__class__).split(".")[-1].replace("'>", "")
 
         self.workers = []
         self.tid = tid
         self.settings = settings
+        self.reversal = 0
 
         if self.__queuetype == 'P':
             self.settings = {}
             QCLS = LocalQueue
-            # self.queue = LocalQueue()()
+            # self.__queue = LocalQueue()()
         elif self.__queuetype == 'B':
             QCLS = BeanstalkdQueue
-            # self.queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
+            # self.__queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
         elif self.__queuetype == 'R':
             QCLS = RedisQueue
-            # self.queue = RedisQueue(weight=weight, **dict(DataQueue.redis, **tube))
+            # self.__queue = RedisQueue(weight=weight, **dict(DataQueue.redis, **tube))
         elif self.__queuetype == 'M':
             QCLS = MongoQueue
-            # self.queue = MongoQueue(**dict(DataQueue.mongo, **tube))
+            # self.__queue = MongoQueue(**dict(DataQueue.mongo, **tube))
         else:
             raise Exception('Error queue type.')
-        self.queue = QCLS(**self.settings)
+        self.__queue = QCLS(**self.settings)
         self.extract()
-        self.prepare()
 
     def extract(self):
+
         self.__flows = {}
         for attr in dir(self):
-            if attr.startswith('__'):
+            if attr.startswith('__') or attr.startswith('_'):
                 continue
             method = getattr(self, attr)
             if hasattr(method, 'label'):
                 self.__flows[method.label] = method
 
-        for attr in dir(self):
-            if attr.startswith('__'):
-                continue
-            method = getattr(self, attr)
-            if hasattr(method, 'priority'):
-                try:
-                    method.priority = self.reversal + 2 - method.priority
-                except:
-                    method.__func__.priority = self.reversal + 2 - method.priority
-            self.queue.funid(method, id(method))
-            self.__weight.append(method.weight)
-            if hasattr(method, 'store'):
-                self.queue.funid(method.store, id(method.store))
-                self.__weight.append(method.store.weight)
+        for label in self.__flows:
+            notuserank = True
+            self.__weight[label] = []
+            for step in self.traversal(self.tinder(label), []):
+                if step is None:
+                    continue
+                self.__queue.funid(step, id(step))
+                if hasattr(method, 'store'):
+                    self.__queue.funid(method.store, id(method.store))
+                notuserank = notuserank and hasattr(step, 'priority')
 
-        if self.__weight:
-            self.__weight = list(set(self.__weight))
-            self.__weight.sort()
+            for step in self.traversal(self.tinder(label), []):
+                if step is None:
+                    continue
+                if notuserank:
+                    priority = step.priority
+                else:
+                    priority = self.reversal + 2 - getattr(self, step.__name__).rank
+                try:
+                    setattr(step, '%s_prior' % label, priority)
+                except:
+                    setattr(step.__func__, '%s_prior' % label, priority)
+                self.__weight[label].append(priority)
+                if hasattr(method, 'store'):
+                    self.__weight[label].append(method.store.priority)
+
+        for label in self.__weight:
+            self.__weight[label] = list(set(self.__weight[label]))
+            self.__weight[label].sort()
         
     def prepare(self):
         self.settings['weight'] = self.__weight
         for k in range(self.__worknum):
             if self.__queuetype == 'P':
-                queue = self.queue
+                queue = self.__queue
             else:
                 queue = QCLS(**self.settings)
             worker = Foreverworker(queue)
             self.workers.append(worker)
 
+    def tinder(self, flow):
+        return self.__flows[flow]
+
     def fire(self, flow, step=None, version=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), *args, **kwargs):
-        if step is None:
-            it = self.__flows[flow]
-        else:
-            it = Next.footprint['%s.%s' % (str(self), step)]
-        self.prepare(flow)
+        self.prepare()
         ssid = generateid(self.tid, args, kwargs, 0, it.unique)
-        self.queue.put((it.priority * it.space, it.name, 0, args, kwargs, str(self.tid), ssid, version))
+        self.__queue.put((it.priority * it.space, it.name, 0, args, kwargs, str(self.tid), ssid, version))
         for worker in self.workers:
             worker.setDaemon(True)
             worker.start()
 
     def exit(self):
-        self.queue.task_done(None, force=True)
+        self.__queue.task_done(None, force=True)
 
     def wait(self):
-        self.queue.join()
+        self.__queue.join()
 
     def start(self):
         self.prepare()
@@ -446,18 +485,40 @@ class Workflows(object):
             return self.__flows[flow]
         return Next.footprint[step]
 
-    def task(self, section, tid, version, *args, **kwargs):
-        ssid = generateid(tid, args, kwargs, 0, section.unique)
-        self.queue.put((section.priority * section.space, callpath(section), 0, args, kwargs, str(tid), ssid, version))
+    def format_step(self, step):
+        if step is None:
+            return step
+        return '%s.%s' % (str(self), step)
+
+    def task(self, flow, step, tid, version, *args, **kwargs):
+        ssid = generateid(tid, args, kwargs, 0, step.unique)
+        self.__queue.put((step.priority * step.space, callpath(step), 0, args, kwargs, str(tid), ssid, version))
+
+    def traversal(self, step, footprint=[]):
+        if step.__name__ in footprint:
+            yield None
+
+        else:
+            yield step
+            # print step.name, step.priority
+            # if hasattr(step, 'store'):
+            #     print step.store.name, step.store.priority
+
+            footprint.append(step.__name__)
+
+            if hasattr(step, 'next'):
+                for next_method in step.next:
+                    for next_step in self.traversal(next_method, footprint):
+                        yield next_step
 
     def __str__(self):
         desc = object.__str__(self)
         return desc.replace("<", "").replace("__main__.", "").split(" ")[0]
 
     def __del__(self):
-        if self.queue is not None:
-            self.queue.collect()
-        del self.queue
+        if self.__queue is not None:
+            self.__queue.collect()
+        del self.__queue
         del self.workers
         if threading._active[MTID]:
             del threading._active[MTID]
