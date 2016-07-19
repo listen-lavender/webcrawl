@@ -37,11 +37,11 @@ class Queue(Logger):
             self.mc['%s_funid' % self.tube].update({'name':fid(name)}, {'$set':{'mid':mid, 'name':fid(name)}}, upsert=True)
 
     def put(self, item):
-        priority, name, times, args, kwargs, tid, ssid, version = item
+        flow, priority, name, times, args, kwargs, tid, ssid, version = item
         txt = pickle.dumps({'args': args, 'kwargs': kwargs})
         try:
             status = 2 if times == 0 else 1
-            self.mc[self.tube].insert({'_id':ssid, 'priority':priority, 'name':name, 'status':status, 'times':times, 'deny':[], 'tid':tid, 'txt':txt, 'version':version}, continue_on_error=True)
+            self.mc[self.tube].insert({'_id':ssid, 'flow':flow, 'priority':priority, 'name':name, 'status':status, 'times':times, 'deny':[], 'tid':tid, 'txt':txt, 'version':version}, continue_on_error=True)
             Queue.conditions[self.tube]['event'].clear()
         except:
             pass
@@ -49,6 +49,7 @@ class Queue(Logger):
     def get(self, block=True, timeout=0):
         item = self.mc[self.tube].find_one_and_update({'deny':{'$ne':'localhost'}, 'tid':{'$nin':[]}, 'status':{'$in':[2, 1]}}, {'$set':{'status':3}}, sort=[('priority', 1)])
         if item:
+            flow = item['flow']
             name = item['name']
             priority = item['priority']
             times = item['times']
@@ -57,7 +58,7 @@ class Queue(Logger):
             version = item['version']
             item = item['txt'].encode('utf-8')
             item = pickle.loads(item)
-            return priority, self.funid(name), name, times, tuple(item['args']), item['kwargs'], tid, _id, version
+            return flow, priority, self.funid(name), name, times, tuple(item['args']), item['kwargs'], tid, _id, version
         else:
             return None
 

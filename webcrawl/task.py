@@ -12,7 +12,7 @@ import weakref
 import gevent
 import functools
 import ctypes
-from . import DEFAULT, SPACE, RETRY, TIMELIMIT, CONTINUOUS
+from . import DEFAULT, SPACE, RETRY, TIMELIMIT, CONTINUOUS, Enum
 MTID = threading._get_ident()  # id of main thread
 from time import sleep
 from gevent import monkey, Timeout
@@ -24,6 +24,7 @@ from queue.beanstalkd import Queue as BeanstalkdQueue
 from queue.local import Queue as LocalQueue
 from exception import TimeoutError
 
+CFG = Enum(L='Local', B='Beanstalkd', R='Redis', M='Mongo')
 
 def patch_thread(threading=True, _threading_local=True, Queue=True, Event=False):
     """Replace the standard :mod:`thread` module to make it greenlet-based.
@@ -56,28 +57,26 @@ def clone(src, obj, attach={}):
         setattr(obj, attr, attach[attr])
 
 def assure(method, cls, instancemethod=False):
-    obj = method
-    if instancemethod:
-        obj = method.__func__
-        setattr(obj, 'rank', getattr(obj, 'rank', 1))
-    if hasattr(obj, 'store'):
-        obj.store.name = '%s.%s' % (cls, obj.store.__name__)
-    obj.next = []
-    obj.succ = 0
-    obj.fail = 0
-    obj.timeout = 0
-    obj.next = []
-    setattr(obj, 'unique', getattr(obj, 'unique', []))
-    setattr(obj, 'params', getattr(obj, 'params', []))
-    setattr(obj, 'space', getattr(obj, 'space', SPACE))
-    setattr(obj, 'retry', getattr(obj, 'retry', RETRY))
-    setattr(obj, 'timelimit', getattr(obj, 'timelimit', TIMELIMIT))
+    if hasattr(method, 'store'):
+        method.store.name = '%s.%s' % (cls, method.store.__name__)
+    method.next = []
+    method.succ = 0
+    method.fail = 0
+    method.timeout = 0
+    setattr(method, 'unique', getattr(method, 'unique', []))
+    setattr(method, 'params', getattr(method, 'params', []))
+    setattr(method, 'space', getattr(method, 'space', SPACE))
+    setattr(method, 'retry', getattr(method, 'retry', RETRY))
+    setattr(method, 'timelimit', getattr(method, 'timelimit', TIMELIMIT))
 
 class Next(object):
     footprint = {}
 
     def __init__(self, *next):
         self.next = list(next)
+        for index, item in enumerate(self.next):
+            if callable(item):
+                self.next[index] = item.__name__
         self.attach = {}
         self.circle = {
             'parent_node': None,
@@ -150,16 +149,20 @@ class Next(object):
 
             if not next:
                 method = cls.__dict__[attr]
-                if isinstance(method, Next):
-                    next = functools.partial(method.curr, obj)
-                    clone(method.curr, next, method.attach)
-                    next.name = name
-                    assure(next, str(obj))
-                else:
-                    next = getattr(obj, attr)
-                    next.__func__.name = name
-                    next.__func__.rank = getattr(method, 'rank', 1)
-                    assure(next, str(obj), instancemethod=True)
+                if not isinstance(method, Next):
+                    method.name = name
+                    method.rank = getattr(method, 'rank', 1)
+                    method = Next()(method)
+                next = functools.partial(method.curr, obj)
+                clone(method.curr, next, method.attach)
+                next.name = name
+                assure(next, str(obj))
+                # else:
+                #     next = getattr(obj, attr)
+                #     next.__func__.name = name
+                #     next.__func__.rank = getattr(method, 'rank', 1)
+                #     assure(next, str(obj), instancemethod=True)
+                #     print next, next.__name__, next.succ
 
                 self.footprint[name] = next
 
@@ -221,10 +224,13 @@ def switch(space=SPACE):
         return _deco(fun, 'space', space)
     return deco
 
-def store(db, way, update=None, method=None, priority=1, space=1, obj=None):
+def store(db, way, update=None, method=None, priority=1, space=1, unique=[], target=None):
     def deco(fun):
         store = functools.partial(db(way), update=update, method=method)
-        store.__name__ = 'store_%s' % way.im_class.__name__.lower()
+        try:
+            store.__name__ = 'store_%s' % way.im_self.__name__.lower()
+        except:
+            store.__name__ = 'store_%s' % way.im_class.__name__.lower()
         store.retry = RETRY
         store.timelimit = TIMELIMIT
         store.priority = priority
@@ -232,6 +238,8 @@ def store(db, way, update=None, method=None, priority=1, space=1, obj=None):
         store.succ = 0
         store.fail = 0
         store.timeout = 0
+        store.unique = unique
+        store.target = target
 
         return _deco(fun, 'store', store)
     return deco
@@ -257,7 +265,7 @@ def generateid(tid, args, kwargs, times, unique=[]):
         ssid = str(ObjectId())
     return ssid
 
-def pack_current_step(index, index_type, index_val, priority, name, args, kwargs, tid, version, unique=[]):
+def pack_current_step(index, index_type, index_val, flow, priority, name, args, kwargs, tid, version, unique=[]):
     if index_type == int:
         indexargs = list(args)
         indexargs[index] = index_val
@@ -268,34 +276,49 @@ def pack_current_step(index, index_type, index_val, priority, name, args, kwargs
         indexkwargs = dict(kwargs, **{index: index_val})
     else:
         raise "Incorrect arguments."
-    ssid = generateid(tid, args, kwargs, times, unique)
-    return priority, name, 0, args, kwargs, tid, ssid, version
+    ssid = generateid(tid, indexargs, indexkwargs, 0, unique)
+    return flow, priority, name, 0, indexargs, indexkwargs, tid, ssid, version
 
-def pack_next_step(retvar, priority, name, tid, version, serialno=0, params=[], unique=[]):
+def pack_next_step(retval, flow, priority, name, tid, version, serialno=0, params=[], unique=[]):
     args = []
     kwargs = {}
     priority = priority + serialno
-    if type(retvar) == dict:
-        kwargs = retvar
-    elif type(retvar) == tuple:
-        args = retvar
+    if type(retval) == dict:
+        for key in params:
+            key in retval and args.append(retval[key])
+        if not kwargs and not params:
+            kwargs = retval
+    elif type(retval) == tuple:
+        for key in params:
+            key < len(retval) and args.append(retval[key])
+        if not args and not params:
+            args = retval
     else:
-        args = (retvar, )
+        args = (retval, )
     args = tuple(args)
-    ssid = generateid(tid, args, kwargs, times, unique)
-    return priority, name, 0, args, kwargs, tid, ssid, version
+    ssid = generateid(tid, args, kwargs, 0, unique)
+    if args or kwargs:
+        return flow, priority, name, 0, args, kwargs, tid, ssid, version
 
-def pack_store(retvar, priority, name, tid, version, serialno=0, unique=[]):
-    args = (retvar, )
+def pack_store(retval, flow, priority, name, tid, version, serialno=0, target=None, unique=[]):
+    args = []
     kwargs = {}
     priority = priority + serialno
-    ssid = generateid(tid, args, kwargs, times, unique)
-    return priority, name, 0, args, kwargs, tid, ssid, version
+    if target is None:
+        args = (retval, )
+    else:
+        try:
+            args = (retval.pop(target), )
+        except:
+            args = ()
+    ssid = generateid(tid, args, kwargs, 0, unique)
+    if args:
+        return flow, priority, name, 0, args, kwargs, tid, ssid, version
 
-def pack_except(times, priority, name, args, kwargs, tid, version, unique=[]):
+def pack_except(times, flow, priority, name, args, kwargs, tid, version, unique=[]):
     times = times + 1
     ssid = generateid(tid, args, kwargs, times, unique)
-    return priority, name, times, args, kwargs, tid, ssid, version
+    return flow, priority, name, times, args, kwargs, tid, ssid, version
 
 def format_except():    
     t, v, b = sys.exc_info()
@@ -312,7 +335,7 @@ def geventwork(workqueue):
         item = workqueue.get(timeout=10)
         if item is None:
             continue
-        priority, mid, name, times, args, kwargs, tid, ssid, version= item
+        flow, priority, mid, name, times, args, kwargs, tid, ssid, version = item
         method = ctypes.cast(mid, ctypes.py_object).value
         index = getattr(method, 'index', None)
         next = getattr(method, 'next', [])
@@ -332,25 +355,31 @@ def geventwork(workqueue):
             else:
                 result = iter([result, result]) if index else iter([result, ])
             if result and index:
-                retvar = result.next()
-                retvar and times == 0 and workqueue.put(pack_current_step(index, type(index), retvar, priority, name, args, kwargs, tid, version, unique))
+                retval = result.next()
+                retval and times == 0 and workqueue.put(pack_current_step(index, type(index), retval, flow, priority, name, args, kwargs, tid, version, unique))
             serialno = 0
-            for retvar in result:
-                if retvar is None:
+            for retval in result:
+                if retval is None:
                     continue
+                if store:
+                    store_priority = store.priority * store.space
+                    package = pack_store(retval, flow, store_priority, store.name, tid, version, serialno, store.target, store.unique)
+                    if package is not None:
+                        workqueue.put(package)
                 for next_method in next:
-                    next_priority = next_method.priority * next_method.space
-                    workqueue.put(pack_next_step(retvar, next_priority, next_method.name, tid, version, serialno, next_method.params, next_method.unique))
-                store and workqueue.put(pack_store(retvar, store.priority * store.space, store.name, tid, version, serialno, store.unique))
+                    next_priority = getattr(next_method, '%s_prior' % flow) * next_method.space
+                    package = pack_next_step(retval, flow, next_priority, next_method.name, tid, version, serialno, next_method.params, next_method.unique)
+                    if package is not None:
+                        workqueue.put(package)
                 serialno = serialno + 1
             method.succ = method.succ + 1
         except TimeoutError:
-            workqueue.put(pack_except(times, priority, name, args, kwargs, tid, version, unique))
+            workqueue.put(pack_except(times, flow, priority, name, args, kwargs, tid, version, unique))
             method.timeout = method.timeout + 1
             txt = format_except()
             workqueue.task_skip((tid, ssid, 'TIMEOUT', txt, create_time))
         except:
-            workqueue.put(pack_except(times, priority, name, args, kwargs, tid, version, unique))
+            workqueue.put(pack_except(times, flow, priority, name, args, kwargs, tid, version, unique))
             method.fail = method.fail + 1
             txt = format_except()
             workqueue.task_skip((tid, ssid, 'FAIL', txt, create_time))
@@ -359,6 +388,21 @@ def geventwork(workqueue):
         finally:
             timer.cancel()
             del timer
+
+
+class Onceworker(threading.Thread):
+
+    def __init__(self, fun, args, kwargs, callback=None):
+        super(Onceworker, self).__init__()
+        self.__fun = fun
+        self.__args = args
+        self.__kwargs = kwargs
+        self.__callback = callback
+
+    def run(self):
+        self.__fun(*args, **kwargs)
+        if self.__callback:
+            self.__callback()
 
 
 class Foreverworker(threading.Thread):
@@ -376,7 +420,7 @@ class Foreverworker(threading.Thread):
 
 class Workflows(object):
 
-    def __init__(self, worknum, queuetype='P', tid='', settings={}):
+    def __init__(self, worknum, queuetype=CFG.L, tid='', settings={}):
         self.__worknum = worknum
         self.__queuetype = queuetype
         self.__flows = {}
@@ -389,17 +433,17 @@ class Workflows(object):
         self.settings = settings
         self.reversal = 0
 
-        if self.__queuetype == 'P':
+        if self.__queuetype == CFG.L:
             self.settings = {}
             QCLS = LocalQueue
             # self.__queue = LocalQueue()()
-        elif self.__queuetype == 'B':
+        elif self.__queuetype == CFG.B:
             QCLS = BeanstalkdQueue
             # self.__queue = BeanstalkdQueue(**dict(DataQueue.beanstalkd, **tube))
-        elif self.__queuetype == 'R':
+        elif self.__queuetype == CFG.R:
             QCLS = RedisQueue
             # self.__queue = RedisQueue(weight=weight, **dict(DataQueue.redis, **tube))
-        elif self.__queuetype == 'M':
+        elif self.__queuetype == CFG.M:
             QCLS = MongoQueue
             # self.__queue = MongoQueue(**dict(DataQueue.mongo, **tube))
         else:
@@ -423,9 +467,9 @@ class Workflows(object):
             for step in self.traversal(self.tinder(label), []):
                 if step is None:
                     continue
-                self.__queue.funid(step, id(step))
-                if hasattr(method, 'store'):
-                    self.__queue.funid(method.store, id(method.store))
+                self.__queue.funid(step.name, id(step))
+                if hasattr(step, 'store'):
+                    self.__queue.funid(step.store.name, id(step.store))
                 notuserank = notuserank and hasattr(step, 'priority')
 
             for step in self.traversal(self.tinder(label), []):
@@ -435,10 +479,7 @@ class Workflows(object):
                     priority = step.priority
                 else:
                     priority = self.reversal + 2 - getattr(self, step.__name__).rank
-                try:
-                    setattr(step, '%s_prior' % label, priority)
-                except:
-                    setattr(step.__func__, '%s_prior' % label, priority)
+                setattr(step, '%s_prior' % label, priority)
                 self.__weight[label].append(priority)
                 if hasattr(method, 'store'):
                     self.__weight[label].append(method.store.priority)
@@ -448,9 +489,11 @@ class Workflows(object):
             self.__weight[label].sort()
         
     def prepare(self):
+        QCLS = self.__queue.__class__
+        self.settings['init'] = False
         self.settings['weight'] = self.__weight
         for k in range(self.__worknum):
-            if self.__queuetype == 'P':
+            if self.__queuetype == CFG.L:
                 queue = self.__queue
             else:
                 queue = QCLS(**self.settings)
@@ -460,10 +503,11 @@ class Workflows(object):
     def tinder(self, flow):
         return self.__flows[flow]
 
-    def fire(self, flow, step=None, version=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), *args, **kwargs):
+    def fire(self, flow, step, version, *args, **kwargs):
         self.prepare()
-        ssid = generateid(self.tid, args, kwargs, 0, it.unique)
-        self.__queue.put((it.priority * it.space, it.name, 0, args, kwargs, str(self.tid), ssid, version))
+        priority = getattr(step, '%s_prior' % flow)
+        ssid = generateid(self.tid, args, kwargs, 0, step.unique)
+        self.__queue.put((flow, priority * step.space, step.name, 0, args, kwargs, str(self.tid), ssid, version))
         for worker in self.workers:
             worker.setDaemon(True)
             worker.start()
@@ -480,19 +524,17 @@ class Workflows(object):
             worker.setDaemon(True)
             worker.start()
 
-    def select(self, flow, step=None):
-        if step is None:
-            return self.__flows[flow]
-        return Next.footprint[step]
-
-    def format_step(self, step):
-        if step is None:
-            return step
-        return '%s.%s' % (str(self), step)
+    def select(self, flow, section=None):
+        if section is None:
+            return self.tinder(flow)
+        if hasattr(self, section):
+            return getattr(self, section)
+        return Next.footprint[section]
 
     def task(self, flow, step, tid, version, *args, **kwargs):
         ssid = generateid(tid, args, kwargs, 0, step.unique)
-        self.__queue.put((step.priority * step.space, callpath(step), 0, args, kwargs, str(tid), ssid, version))
+        priority = getattr(step, '%s_prior' % flow)
+        self.__queue.put((flow, priority * step.space, step.name, 0, args, kwargs, str(tid), ssid, version))
 
     def traversal(self, step, footprint=[]):
         if step.__name__ in footprint:
@@ -500,7 +542,7 @@ class Workflows(object):
 
         else:
             yield step
-            # print step.name, step.priority
+            # print step.name, getattr(step, '%s_prior' % flow)
             # if hasattr(step, 'store'):
             #     print step.store.name, step.store.priority
 

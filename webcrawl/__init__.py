@@ -31,6 +31,17 @@ RETRY = 0
 TIMELIMIT = 0
 CONTINUOUS = True
 
+class Enum(object):
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(**kwargs)
+
+    def __getattribute__(self, key):
+        return object.__getattribute__(self, key)
+
+    def __setattr__(self, key, val):
+        raise Exception("AttributeError: '%s' object has no attribute '%s'" % (self.__class__.__name__, key))
+
 class MyLocal(object):
 
     def __init__(self, **kwargs):

@@ -9,21 +9,25 @@ import functools
 import threading
 from threading import Thread
 
-from task import Workflows
+from task import Workflows, CFG
 
 WORKNUM = 30
-QUEUETYPE = 'P'
 
 
 class SpiderOrigin(Workflows):
 
-    def __init__(self, worknum=WORKNUM, queuetype=QUEUETYPE, timeout=-1, tid=0, settings={}):
+    def __init__(self, worknum=WORKNUM, queuetype=CFG.L, timeout=-1, tid=0, settings={}):
         super(SpiderOrigin, self).__init__(worknum=worknum, queuetype=queuetype, tid=tid, settings=settings)
         self.timeout = timeout
 
-    def fetch(self, flow, step, version, *args, **kwargs):
+    def format_section(self, section):
+        if section is None:
+            return section
+        return '%s.%s' % (str(self), section)
+
+    def fetch(self, flow, section, version, *args, **kwargs):
         start = time.time()
-        step = self.select(flow, self.format_step(step))
+        step = self.select(flow, self.format_section(section))
         self.fire(flow, step, version, *args, **kwargs)
         if self.timeout > -1:
             def check(self, timeout):

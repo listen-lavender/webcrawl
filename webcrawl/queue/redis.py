@@ -16,7 +16,7 @@ class Queue(Logger):
 
     def __init__(self, host='localhost', port=6379, db=0, tube='', timeout=30, items=None, unfinished_tasks=0, init=True, weight=[]):
         self.rc = redis.StrictRedis(host=host, port=port, db=db)
-        self.prefix = 'pholcus_task'
+        self.prefix = 'task'
         self.tube = '%s%s' % (self.prefix, tube)
         self.unfinished_tasks = 0
 
@@ -45,10 +45,10 @@ class Queue(Logger):
             self.rc.hset('%s_funid' % self.tube, fid(name), mid)
 
     def put(self, item):
-        priority, name, times, args, kwargs, tid, ssid, version = item
+        flow, priority, name, times, args, kwargs, tid, ssid, version = item
         # self.rc.zadd(self.tube, pickle.dumps({'priority': priority, 'mid': mid,
         #                         'times': times, 'args': args, 'kwargs': kwargs}), priority)
-        self.rc.lpush('_'.join([self.tube, str(priority)]), pickle.dumps({'priority': priority, 'name':name, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'ssid':ssid, 'version':version}))
+        self.rc.lpush('_'.join([self.tube, str(priority)]), pickle.dumps({'flow':flow, 'priority': priority, 'name':name, 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'ssid':ssid, 'version':version}))
         self.unfinished_tasks += 1
         Queue.conditions[self.tube]['event'].clear()
 
@@ -58,7 +58,7 @@ class Queue(Logger):
         if item:
             item = item[-1]
             item = pickle.loads(item)
-            return item['priority'], self.funid(item['name']), item['name'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['ssid'], item['version']
+            return item['flow'], item['priority'], self.funid(item['name']), item['name'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['ssid'], item['version']
 
     def empty(self):
         total = sum([self.rc.llen(one) for one in ['_'.join([str(self.tube), str(one)]) for one in Queue.conditions[self.tube]['weight']]])

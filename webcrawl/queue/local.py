@@ -11,10 +11,6 @@ from .. import Logger
 from ..character import unicode2utf8, json
 from . import fid
 
-# class Queue(queue.Queue):
-
-#     def __new__(cls):
-#         return queue.Queue.__new__(cls)
 class Queue(queue.Queue, Logger):
 
     def __init__(self, maxsize=None, items=None, unfinished_tasks=None, weight=[]):
@@ -48,7 +44,7 @@ class Queue(queue.Queue, Logger):
 
     def _get(self, heappop=heapq.heappop):
         item = list(heappop(self.queue))
-        item.insert(1, self.funid(item[1]))
+        item.insert(2, self.funid(item[2]))
         item = tuple(item)
         return item
 
@@ -85,7 +81,6 @@ class Queue(queue.Queue, Logger):
             self.all_tasks_done.release()
 
     def join(self):
-        # self.parent.join()
         self.all_tasks_done.acquire()
         try:
             while self.unfinished_tasks:

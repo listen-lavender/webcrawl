@@ -38,8 +38,8 @@ class Queue(Logger):
             Queue.funids[fid(name)] = mid
 
     def put(self, item):
-        priority, name, times, args, kwargs, tid, ssid, version = item
-        self.bc.put(pickle.dumps({'priority': priority, 'name':name,
+        flow, priority, name, times, args, kwargs, tid, ssid, version = item
+        self.bc.put(pickle.dumps({'flow': flow, 'priority': priority, 'name':name,
                                 'times': times, 'args': args, 'kwargs': kwargs, 'tid':tid, 'ssid':ssid, 'version':version}), priority=priority)
         Queue.conditions[self.tube]['event'].clear()
 
@@ -48,7 +48,7 @@ class Queue(Logger):
         if item:
             item.delete()
             item = pickle.loads(item.body)
-            return item['priority'], self.funid(item['name']), item['name'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['ssid'], item['version']
+            return item['flow'], item['priority'], self.funid(item['name']), item['name'], item['times'], tuple(item['args']), item['kwargs'], item['tid'], item['ssid'], item['version']
         else:
             return None
 

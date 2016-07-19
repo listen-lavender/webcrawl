@@ -17,7 +17,7 @@ from queue.lib.queue import Queue
 from lxml import etree as ET
 from lxml import html as HT
 from character import unicode2utf8
-from . import MyLocal
+from . import MyLocal, Enum
 from lxmlclean import HtmlCleaner
 from exception import URLFailureException, MarktypeError, FormatError, ArgumentError
 
@@ -29,6 +29,7 @@ except:
     except:
         print "You need install PIL library, from http://www.pythonware.com/products/pil/."
 
+CFG = Enum(H='HTML', X='XML', J='JSON', P='PLAIN', O='ORIGIN', T='TEXT', A='ATTR')
 
 REQU = MyLocal(timeout=30)
 
@@ -98,15 +99,15 @@ def getNodeContent(node, consrc, marktype='HTML'):
     """
     """
     if node is not None:
-        if consrc == 'TEXT':
-            if marktype == 'HTML':
+        if consrc == CFG.T:
+            if marktype == CFG.H:
                 retvar = node.text_content() or ''
-            elif marktype == 'XML':
+            elif marktype == CFG.X:
                 retvar = node.text or ''
             else:
                 raise MarktypeError(marktype)
         else:
-            retvar = node.get(consrc['ATTR']) or ''
+            retvar = node.get(consrc[CFG.A]) or ''
         retvar = retvar.encode('utf-8')
     else:
         retvar = ''
@@ -139,15 +140,15 @@ def requformat(r, coding, dirtys, myfilter, format, filepath):
     for one in dirtys:
         content = content.replace(one[0], one[1])
     content = myfilter(content)
-    if format == 'HTML':
+    if format == CFG.H:
         content = HT.fromstring(content.decode('utf-8'))
-    elif format == 'JSON':
+    elif format == CFG.J:
         content = unicode2utf8(json.loads(content.decode('utf-8')))
-    elif format == 'XML':
+    elif format == CFG.X:
         content = ET.fromstring(content)
-    elif format == 'TEXT':
+    elif format == CFG.P:
         content = content
-    elif format == 'ORIGIN':
+    elif format == CFG.O:
         content = r
     else:
         raise FormatError(format)
