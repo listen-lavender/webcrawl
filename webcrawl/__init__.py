@@ -26,7 +26,7 @@ DEFAULT = [
 '__subclasshook__'
 ]
 
-SPACE = 100
+SPACE = 1
 RETRY = 0
 TIMELIMIT = 0
 CONTINUOUS = True

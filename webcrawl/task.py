@@ -363,12 +363,14 @@ def geventwork(workqueue):
                     continue
                 if store:
                     store_priority = store.priority * store.space
-                    package = pack_store(retval, flow, store_priority, store.name, tid, version, serialno, store.target, store.unique)
+                    store_serialno = serialno if store.space > 1 else 0
+                    package = pack_store(retval, flow, store_priority, store.name, tid, version, store_serialno, store.target, store.unique)
                     if package is not None:
                         workqueue.put(package)
                 for next_method in next:
                     next_priority = getattr(next_method, '%s_prior' % flow) * next_method.space
-                    package = pack_next_step(retval, flow, next_priority, next_method.name, tid, version, serialno, next_method.params, next_method.unique)
+                    next_serialno = serialno if next_method.space > 1 else 0
+                    package = pack_next_step(retval, flow, next_priority, next_method.name, tid, version, next_serialno, next_method.params, next_method.unique)
                     if package is not None:
                         workqueue.put(package)
                 serialno = serialno + 1
@@ -424,7 +426,7 @@ class Workflows(object):
         self.__worknum = worknum
         self.__queuetype = queuetype
         self.__flows = {}
-        self.__weight = {}
+        self.__weight = []
         if not hasattr(self, 'clsname'):
             self.clsname = str(self.__class__).split(".")[-1].replace("'>", "")
 
@@ -463,7 +465,6 @@ class Workflows(object):
 
         for label in self.__flows:
             notuserank = True
-            self.__weight[label] = []
             for step in self.traversal(self.tinder(label), []):
                 if step is None:
                     continue
@@ -480,13 +481,12 @@ class Workflows(object):
                 else:
                     priority = self.reversal + 2 - getattr(self, step.__name__).rank
                 setattr(step, '%s_prior' % label, priority)
-                self.__weight[label].append(priority)
-                if hasattr(method, 'store'):
-                    self.__weight[label].append(method.store.priority)
+                self.__weight.append(priority)
+                if hasattr(step, 'store'):
+                    self.__weight.append(step.store.priority)
 
-        for label in self.__weight:
-            self.__weight[label] = list(set(self.__weight[label]))
-            self.__weight[label].sort()
+        self.__weight = list(set(self.__weight))
+        self.__weight.sort()
         
     def prepare(self):
         QCLS = self.__queue.__class__

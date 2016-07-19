@@ -28,7 +28,7 @@ class Queue(Logger):
             self.unfinished_tasks = 0
 
         if self.tube in Queue.conditions:
-            pass
+            Queue.conditions[self.tube]['weight'] = weight
         else:
             Queue.conditions[self.tube] = {'event': threading.Event(), 'mutex':threading.Lock(), 'weight':weight}
             Queue.conditions[self.tube]['event'].set()
@@ -68,10 +68,12 @@ class Queue(Logger):
         pass
 
     def task_done(self, item, force=False):
-        if self.unfinished_tasks < 1 or force:
+        self.unfinished_tasks = self.unfinished_tasks - 1
+        if self.unfinished_tasks < 0 or force:
             Queue.conditions[self.tube]['event'].set()
 
     def task_skip(self, item):
+        self.unfinished_tasks = self.unfinished_tasks - 1
         if item is not None:
             tid, ssid, status, txt, create_time = item
             elapse = round(time.time() - create_time, 2)
@@ -79,7 +81,7 @@ class Queue(Logger):
             self._print(tid=tid, ssid=ssid, 
                 status=status, elapse=elapse, 
                 txt=txt, create_time=create_time)
-        if self.unfinished_tasks < 1:
+        if self.unfinished_tasks < 0:
             Queue.conditions[self.tube]['event'].set()
 
     def join(self):
