@@ -422,7 +422,7 @@ class Foreverworker(threading.Thread):
 
 class Workflows(object):
 
-    def __init__(self, worknum, queuetype=CFG.L, tid='', settings={}):
+    def __init__(self, worknum=3, queuetype=CFG.L, tid='', settings={}):
         self.__worknum = worknum
         self.__queuetype = queuetype
         self.__flows = {}
@@ -461,6 +461,17 @@ class Workflows(object):
                 continue
             method = getattr(self, attr)
             if hasattr(method, 'label'):
+                if not hasattr(method, 'update_rank'):
+                    name = '%s.%s' % (str(self), attr)
+                    method.__func__.rank = 1
+                    method = Next()(method.__func__)
+                    function = functools.partial(method.curr, self)
+                    function.name = name
+                    function.rank = getattr(method, 'rank', 1)
+                    clone(method.curr, function, method.attach)
+                    assure(function, str(self))
+                    method = function
+                    Next.footprint[name] = function
                 self.__flows[method.label] = method
 
         for label in self.__flows:
@@ -524,6 +535,14 @@ class Workflows(object):
             worker.setDaemon(True)
             worker.start()
 
+    def record(self, step):
+        for step in self.traversal(step, []):
+            if step is None:
+                continue
+            self.__queue.funid(step.name, id(step))
+            if hasattr(step, 'store'):
+                self.__queue.funid(step.store.name, id(step.store))
+
     def select(self, flow, section=None):
         if section is None:
             return self.tinder(flow)
@@ -562,8 +581,6 @@ class Workflows(object):
             self.__queue.collect()
         del self.__queue
         del self.workers
-        if threading._active[MTID]:
-            del threading._active[MTID]
 
 if __name__ == '__main__':
     pass
