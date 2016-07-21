@@ -461,7 +461,7 @@ class Workflows(object):
                 continue
             method = getattr(self, attr)
             if hasattr(method, 'label'):
-                if not hasattr(method, 'update_rank'):
+                if not hasattr(method, 'next'):
                     name = '%s.%s' % (str(self), attr)
                     method.__func__.rank = 1
                     method = Next()(method.__func__)
