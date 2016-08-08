@@ -20,14 +20,14 @@ task.py(work.py)是任务流workflow的实现，是数据驱动异步执行的�
 >    - task timeout 
 
 ## queue支持
-pjq.py是priority join queue，为了支持任务流的实现，其中redis queue比较强大，支持task的增查改，就是在执行过程中subtask是可控的。
+pjq.py是priority join queue，为了支持任务流的实现，其中mongo queue比较强大，支持task的增查改，就是在执行过程中subtask是可控的。
 >    - workflow 
 >    - priority 
 >    - selfloop 
 >    - subtask timeout 
 >    - task timeout 
 
-## redis queue
+## mongo queue
 ```
  |-------put ---------- get             insert   insert
  |       /                \                |        |
