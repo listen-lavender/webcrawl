@@ -432,7 +432,7 @@ class Workflows(object):
 
         self.workers = []
         self.tid = tid
-        self.settings = settings
+        self.settings = copy.deepcopy(settings)
         self.reversal = 0
 
         if self.__queuetype == CFG.L:
