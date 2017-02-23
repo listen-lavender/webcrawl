@@ -428,7 +428,7 @@ class Workflows(object):
         self.__flows = {}
         self.__weight = []
         if not hasattr(self, 'clsname'):
-            self.clsname = str(self.__class__).split(".")[-1].replace("'>", "")
+            self.clsname = self.__class__.__name__ # str(self.__class__).split(".")[-1].replace("'>", "")
 
         self.workers = []
         self.tid = tid
